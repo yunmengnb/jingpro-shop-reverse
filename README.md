@@ -59,7 +59,6 @@ docker compose up -d --build
 ## 目录
 
 ```text
-node-docker/
 ├─ public/          前端静态资源
 ├─ src/             Node.js 服务端代码
 ├─ test/            自动化测试
