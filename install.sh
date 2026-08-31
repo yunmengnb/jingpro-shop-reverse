@@ -10,6 +10,17 @@ fail() { printf '错误：%s\n' "$1" >&2; exit 1; }
 validate_shop_url() { [[ "$1" =~ ^https?://[^/]+/shop/[A-Za-z0-9_-]+/?$ ]]; }
 validate_port() { [[ "$1" =~ ^[0-9]+$ ]] && ((10#$1 >= 1 && 10#$1 <= 65535)); }
 require_root() { ((EUID == 0)) || fail "请使用 root 用户运行安装命令。"; }
+detect_server_ip() {
+  local ip
+  # 先尝试获取公网 IP（多服务兜底，避免某个挂了）
+  for svc in "https://api.ipify.org" "https://ifconfig.me/ip" "https://ip.sb" "https://icanhazip.com"; do
+    ip=$(curl -fsSL --connect-timeout 3 --max-time 5 "$svc" 2>/dev/null | tr -d '\r\n ') && [[ -n "$ip" ]] && { printf '%s' "$ip"; return; }
+  done
+  # 兜底：hostname -I 取第一个内网 IP
+  ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  [[ -n "$ip" ]] && { printf '%s' "$ip"; return; }
+  printf '服务器IP'
+}
 show_agreement() {
   cat <<'AGREEMENT'
 
@@ -159,7 +170,7 @@ MENU
 }
 
 main() {
-  local shop_url port
+  local shop_url port server_ip
   require_root
   command -v curl >/dev/null 2>&1 || fail "未安装 curl。"
   command -v tar >/dev/null 2>&1 || fail "未安装 tar。"
@@ -175,6 +186,7 @@ main() {
   install_command
   open_port "$port"
   docker compose --project-directory "$INSTALL_DIR" up -d --build
-  printf '安装完成：http://服务器IP:%s/\n终端管理命令：shop-pro\n' "$port"
+  server_ip=$(detect_server_ip)
+  printf '安装完成：http://%s:%s/\n终端管理命令：shop-pro\n' "$server_ip" "$port"
 }
 main "$@"
