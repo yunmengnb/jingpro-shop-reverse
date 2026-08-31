@@ -1,0 +1,28 @@
+// 忆梦云团队开发
+import crypto from 'node:crypto';
+import { cachedRequest, cleanKey, inputError, request, sessionToken, validateContact } from './upstream.js';
+import { resolvePayment } from './payment.js';
+
+const truncate = (v, n) => Array.from(String(v || '').trim()).slice(0, n).join('');
+const captchaUrl = (config, value, path) => { const url = new URL(value); const upstream = new URL(config.upstream); if (url.protocol !== upstream.protocol || url.host !== upstream.host || url.pathname.toLowerCase() !== path.toLowerCase()) throw inputError('验证码地址无效'); return url; };
+export const actions = ['health','shop','categories','goods','channels','price','contact-check','order','payment-resolve','query','orders','order-info','captcha-start','captcha-image','captcha-check'];
+
+export async function handleAction(config, action, input = {}, query = {}) {
+  if (action === 'health') return { code: 1, msg: 'ok', data: { program: config.programName, version: config.version, environment: { ok: true, node_version: process.version, shop_url: config.shopUrl } } };
+  if (action === 'shop') return cachedRequest(config, '/shopApi/Shop/info', { token: config.shopToken });
+  if (action === 'categories') return cachedRequest(config, '/shopApi/Shop/categoryList', { token: config.shopToken, goods_type: 'card' });
+  if (action === 'goods') return cachedRequest(config, '/shopApi/Shop/goodsList', { token: config.shopToken, category_id: Number.isInteger(Number(input.category_id)) ? Number(input.category_id) : -1, keywords: truncate(input.keywords, 50), goods_type: 'card', current: 1, pageSize: 100 });
+  if (action === 'channels') { if (!cleanKey(input.goods_key)) throw inputError('请选择商品'); return cachedRequest(config, '/shopApi/Shop/getUserChannel', { token: config.shopToken }); }
+  if (action === 'price') { const key = cleanKey(input.goods_key), channel = Number(input.channel_id); if (!key || channel <= 0) throw inputError('商品或支付渠道无效'); return (await request(config, '/shopApi/Shop/getGoodsPrice', { goods_key: key, quantity: Math.max(1, Math.min(100, Number(input.quantity) || 1)), coupon_code: '', channel_id: channel })).result; }
+  if (action === 'contact-check') return { code: 1, msg: 'success', data: { contact: validateContact(input.contact) } };
+  if (action === 'order') { const key = cleanKey(input.goods_key), channel = Number(input.channel_id), contact = validateContact(input.contact); if (!key || channel <= 0) throw inputError('请完整填写商品和支付渠道'); const { result, receivedSession } = await request(config, '/shopApi/Pay/order', { goods_key: key, channel_id: channel, quantity: Math.max(1, Math.min(100, Number(input.quantity) || 1)), contact, coupon_code: '', query_password: '', select_cards_ids: [], extend: {} }); if (result.code === 1 && result.data) { if (!receivedSession) throw new Error('上游未返回支付会话'); result.data.session_token = receivedSession; } return result; }
+  if (action === 'payment-resolve') { const url = new URL(String(input.payurl || '')); const upstream = new URL(config.upstream); if (url.protocol !== 'https:' || url.host !== upstream.host || !/^\/shopApi\/Pay\/payment(?:\/|$)/i.test(url.pathname)) throw inputError('支付入口地址无效'); return { code: 1, msg: 'success', data: await resolvePayment(config, { payurl: url.href, session_token: input.session_token ? sessionToken(input.session_token) : '' }) }; }
+  if (action === 'query') { const no = cleanKey(input.trade_no || input.order_no); if (!no) throw inputError('订单号无效'); const result = (await request(config, '/shopApi/Pay/query', { trade_no: no }, input.session_token)).result; if (result.code === 1) result.data = { ...(result.data || {}), paid: true }; return result; }
+  if (action === 'captcha-start') { const { result, receivedSession } = await request(config, '/shopApi/Common/captchaStart', {}); if (result.code === 1 && result.data) { if (!receivedSession) throw new Error('上游未返回验证码会话'); result.data.session_token = receivedSession; } return result; }
+  if (action === 'captcha-check') { const code = truncate(input.code, 10), ip = String(input.ip || '').trim(); if (!code || !ip) throw inputError('验证码参数无效'); const url = captchaUrl(config, input.check_url, '/shopApi/common/captchaCheck.html'); const first = crypto.createHash('md5').update(code + ip).digest('hex'); const sign = crypto.createHash('md5').update(first + 'JING').digest('hex'); return (await request(config, url.pathname + url.search, { code, sign }, input.session_token)).result; }
+  if (action === 'order-info') { const no = cleanKey(input.trade_no || input.order_no); if (!no) throw inputError('订单号无效'); return (await request(config, '/shopApi/Order/info', { trade_no: no, query_password: truncate(input.query_password, 100), dump: 1 }, input.session_token)).result; }
+  if (action === 'orders') { const keywords = truncate(input.keywords || input.trade_no || input.order_no || input.contact, 100), ticket = truncate(input.ticket, 200); if (!keywords || !ticket) throw inputError('请输入查询内容并完成人机验证'); return (await request(config, '/shopApi/Order/list', { keywords, ticket, status: -1, current: 1, pageSize: 100 }, input.session_token)).result; }
+  throw Object.assign(new Error('接口不存在'), { status: 404 });
+}
+
+export async function captchaImage(config, query) { const url = captchaUrl(config, query.url, '/shopApi/common/captchaImg.html'); const response = await fetch(url, { headers: { accept: 'image/*,*/*;q=0.8', referer: config.shopUrl, cookie: 'PHPSESSID=' + sessionToken(query.session_token), 'user-agent': 'Mozilla/5.0 Chrome/140 Safari/537.36' } }); const type = response.headers.get('content-type') || ''; const data = Buffer.from(await response.arrayBuffer()); if (!response.ok || !type.startsWith('image/') || data.length < 32) throw new Error('验证码图片加载失败'); return { type, data } }
