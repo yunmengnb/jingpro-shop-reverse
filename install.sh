@@ -352,10 +352,7 @@ add_ssl() {
   printf '%s\n' "$cert_content" > "$INSTALL_DIR/nginx/certs/$cert_file"
   printf '%s\n' "$key_content" > "$INSTALL_DIR/nginx/certs/$key_file"
   chmod 600 "$INSTALL_DIR/nginx/certs/$cert_file" "$INSTALL_DIR/nginx/certs/$key_file"
-  # 更新 domains.conf 里的证书文件
-  sed -i "s|^${domain}|.*|${cert_file}|${key_file}|${cert_file}|${key_file}|" "$DOMAINS_FILE" 2>/dev/null || \
-    sed -i "s|^${domain}|.*|${cert_file}|${key_file}|${cert_file}|${key_file}|" "$DOMAINS_FILE" 2>/dev/null || true
-  # 简单可靠的方式：替换该行
+  # 更新 domains.conf 里的证书文件（awk 方式，干净可靠）
   awk -v d="$domain" -v cf="$cert_file" -v kf="$key_file" -F'|' 'BEGIN{OFS="|"} $1==d{print d,cf,kf; found=1; next}{print} END{if(!found) print d,cf,kf}' "$DOMAINS_FILE" > "${DOMAINS_FILE}.new" && mv "${DOMAINS_FILE}.new" "$DOMAINS_FILE"
   update_nginx_conf
   reload_nginx
