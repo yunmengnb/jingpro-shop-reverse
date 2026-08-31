@@ -26,10 +26,10 @@
 
 ## 一键安装
 
-将 `install.sh` 部署到公开 HTTPS 地址后执行：
+直接执行 GitHub Raw 链接即可：
 
 ```bash
-bash <(curl -Ls https://你的域名/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/yunmengnb/jingpro-shop-reverse/main/install.sh)
 ```
 
 安装程序将要求输入：

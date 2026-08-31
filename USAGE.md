@@ -7,7 +7,7 @@
 以 root 用户执行：
 
 ```bash
-bash <(curl -Ls https://你的域名/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/yunmengnb/jingpro-shop-reverse/main/install.sh)
 ```
 
 安装脚本首先显示使用协议与免责声明。阅读后输入 `AGREE` 才能进入配置；输入其他内容会终止安装，且不会写入店铺和端口配置。
@@ -15,6 +15,7 @@ bash <(curl -Ls https://你的域名/install.sh)
 确认协议后，按提示输入完整店铺链接和运行端口。店铺链接格式必须为：
 
 ```text
+http://店铺域名/shop/店铺标识
 https://店铺域名/shop/店铺标识
 ```
 
