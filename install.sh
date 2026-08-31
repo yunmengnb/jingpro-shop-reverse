@@ -53,10 +53,10 @@ install_source() {
   printf '正在下载程序文件...\n'
   curl --fail --location --silent --show-error "$SOURCE_URL" --output "$archive" || fail "程序文件下载失败。"
   tar -xzf "$archive" -C "$extract_root" || fail "程序压缩包解压失败。"
-  source_root=$(find "$extract_root" -mindepth 2 -maxdepth 2 -type d -print -quit)
+  source_root=$(find "$extract_root" -mindepth 1 -maxdepth 1 -type d -print -quit)
   [[ -n "$source_root" ]] || fail "压缩包解压为空。"
   if [[ ! -f "$source_root/compose.yaml" ]]; then
-    source_root=$(find "$extract_root" -mindepth 3 -maxdepth 3 -type d -name node-docker -print -quit)
+    source_root=$(find "$extract_root" -mindepth 2 -maxdepth 2 -type d -name node-docker -print -quit)
     [[ -n "$source_root" && -f "$source_root/compose.yaml" ]] || fail "压缩包中未找到 compose.yaml。"
   fi
   mkdir -p "$INSTALL_DIR"
@@ -124,9 +124,9 @@ install_or_upgrade() {
   [[ ! -f "$ENV_FILE" ]] || cp "$ENV_FILE" "$saved_env"
   printf '正在下载并安装/升级...\n'
   if ! curl -fsSL "$SOURCE_URL" -o "$archive" || ! tar -xzf "$archive" -C "$extract_root"; then rm -rf "$archive" "$extract_root" "$saved_env"; printf '错误：下载或解压失败。\n' >&2; return; fi
-  source_root=$(find "$extract_root" -mindepth 2 -maxdepth 2 -type d -print -quit)
+  source_root=$(find "$extract_root" -mindepth 1 -maxdepth 1 -type d -print -quit)
   if [[ -z "$source_root" || ! -f "$source_root/compose.yaml" ]]; then
-    source_root=$(find "$extract_root" -mindepth 3 -maxdepth 3 -type d -name node-docker -print -quit)
+    source_root=$(find "$extract_root" -mindepth 2 -maxdepth 2 -type d -name node-docker -print -quit)
   fi
   [[ -n "$source_root" && -f "$source_root/compose.yaml" ]] || { rm -rf "$archive" "$extract_root" "$saved_env"; printf '错误：未找到程序目录。\n' >&2; return; }
   mkdir -p "$INSTALL_DIR"; cp -a "$source_root/." "$INSTALL_DIR/"
