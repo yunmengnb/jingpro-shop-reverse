@@ -72,7 +72,7 @@ write_env() {
 # 忆梦云团队开发；由 install.sh 生成
 SHOP_URL=$shop_url
 PORT=$port
-VERIFY_SSL=true
+VERIFY_SSL=false
 CACHE_TTL=60
 EOF
 }
@@ -132,9 +132,9 @@ install_or_upgrade() {
   mkdir -p "$INSTALL_DIR"; cp -a "$source_root/." "$INSTALL_DIR/"
   if [[ -s "$saved_env" ]]; then cp "$saved_env" "$ENV_FILE"
   else
-    printf '请输入完整店铺链接：'; IFS= read -r shop_url; validate_shop_url "$shop_url" || { printf '错误：店铺链接格式无效。\n' >&2; return; }
+    printf '请输入完整店铺链接（支持 http:// 或 https://）：'; IFS= read -r shop_url; validate_shop_url "$shop_url" || { printf '错误：店铺链接格式无效。\n' >&2; return; }
     printf '请输入运行端口 [3000]：'; IFS= read -r port; port=${port:-3000}; validate_port "$port" || { printf '错误：端口无效。\n' >&2; return; }
-    umask 077; printf 'SHOP_URL=%s\nPORT=%s\nVERIFY_SSL=true\nCACHE_TTL=60\n' "$shop_url" "$port" > "$ENV_FILE"
+    umask 077; printf 'SHOP_URL=%s\nPORT=%s\nVERIFY_SSL=false\nCACHE_TTL=60\n' "$shop_url" "$port" > "$ENV_FILE"
   fi
   port=$(get_env PORT); open_port "$port"
   docker compose --project-directory "$INSTALL_DIR" up -d --build
@@ -166,7 +166,7 @@ main() {
   command -v docker >/dev/null 2>&1 || fail "未安装 Docker。请先安装 Docker Engine 与 Compose 插件。"
   docker compose version >/dev/null 2>&1 || fail "缺少 docker compose 插件。"
   show_agreement
-  printf '请输入完整店铺链接（示例 https://shop.example.com/shop/demo）：'; IFS= read -r shop_url
+  printf '请输入完整店铺链接（支持 http:// 或 https://，示例 http://shop.example.com/shop/demo）：'; IFS= read -r shop_url
   validate_shop_url "$shop_url" || fail "店铺链接格式无效。"
   printf '请输入运行端口 [3000]：'; IFS= read -r port; port=${port:-3000}
   validate_port "$port" || fail "端口必须是 1-65535 的数字。"
