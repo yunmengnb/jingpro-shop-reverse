@@ -80,7 +80,7 @@ install_source() {
   # 确保 nginx.conf 模板的 server blocks 占位符存在
   if [[ ! -f "$INSTALL_DIR/nginx/nginx.conf" ]] || ! grep -q '__SERVER_BLOCKS__' "$INSTALL_DIR/nginx/nginx.conf"; then
     mkdir -p "$INSTALL_DIR/nginx"
-    cat > "$INSTALL_DIR/nginx/nginx.conf" <<NGINX_TPL
+    cat > "$INSTALL_DIR/nginx/nginx.conf" <<'NGINX_TPL'
 worker_processes  auto;
 error_log  /var/log/nginx/error.log warn;
 pid        /var/run/nginx.pid;
@@ -92,9 +92,9 @@ events {
 http {
     include       /etc/nginx/mime.types;
     default_type  application/octet-stream;
-    log_format  main  '\$remote_addr - \$remote_user [\$time_local] "\$request" '
-                      '\$status \$body_bytes_sent "\$http_referer" '
-                      '"\$http_user_agent" "\$http_x_forwarded_for"';
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
     access_log  /var/log/nginx/access.log  main;
     sendfile        on;
     keepalive_timeout  65;
@@ -122,55 +122,54 @@ EOF
 # ===== Nginx 配置读写（首次安装和 shop-pro 共用） =====
 DOMAINS_FILE="$INSTALL_DIR/nginx/domains.conf"
 update_nginx_conf() {
-  local server_blocks=''
+  local server_blocks='' clean_blocks
   if [[ -f "$DOMAINS_FILE" ]]; then
     while IFS='|' read -r domain cert_file key_file; do
       [[ -z "$domain" || "$domain" == \#* ]] && continue
       local ssl_block=''
       if [[ -n "$cert_file" && -n "$key_file" && -f "$NGINX_CERTS/$cert_file" && -f "$NGINX_CERTS/$key_file" ]]; then
-        ssl_block="
+        ssl_block='
     listen 443 ssl;
-    ssl_certificate     /etc/nginx/certs/${cert_file};
-    ssl_certificate_key /etc/nginx/certs/${key_file};
+    ssl_certificate     /etc/nginx/certs/'"${cert_file}"';
+    ssl_certificate_key /etc/nginx/certs/'"${key_file}"';
     ssl_protocols       TLSv1.2 TLSv1.3;
     ssl_ciphers         HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
-"
+'
       fi
-      server_blocks+="
+      server_blocks+='
     server {
-        server_name ${domain};${ssl_block}
+        server_name '"${domain}"';'"${ssl_block}"'
         location / {
             proxy_pass http://shop:3000;
             proxy_http_version 1.1;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
-"
-      # 没有 SSL 的域名自动加 80 端口 server
+'
       if [[ -z "$ssl_block" ]]; then
-        server_blocks+="
+        server_blocks+='
     server {
-        server_name ${domain};
+        server_name '"${domain}"';
         listen 80;
         location / {
             proxy_pass http://shop:3000;
             proxy_http_version 1.1;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
-"
+'
       fi
     done < "$DOMAINS_FILE"
   fi
-  # 写入 nginx.conf
-  sed "s|__SERVER_BLOCKS__|${server_blocks}|g" "$INSTALL_DIR/nginx/nginx.conf" | sed 's/\\\$/$/g' > "${NGINX_CONF}.new"
+  # 用 perl 做多行替换，完全避免 sed 对换行和特殊字符的限制
+  SERVER_BLOCKS="$server_blocks" perl -0777 -pe 's/__SERVER_BLOCKS__/$ENV{SERVER_BLOCKS}/' "$INSTALL_DIR/nginx/nginx.conf" > "${NGINX_CONF}.new"
   mv "${NGINX_CONF}.new" "$NGINX_CONF"
 }
 reload_nginx() {
@@ -220,7 +219,7 @@ update_nginx_conf() {
       fi
     done < "$DOMAINS_FILE"
   fi
-  sed "s|__SERVER_BLOCKS__|${server_blocks}|g" "$INSTALL_DIR/nginx/nginx.conf" > "${NGINX_CONF}.new"
+  SERVER_BLOCKS="$server_blocks" perl -0777 -pe 's/__SERVER_BLOCKS__/$ENV{SERVER_BLOCKS}/' "$INSTALL_DIR/nginx/nginx.conf" > "${NGINX_CONF}.new"
   mv "${NGINX_CONF}.new" "$NGINX_CONF"
 }
 reload_nginx() {
