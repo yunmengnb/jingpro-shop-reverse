@@ -28,19 +28,6 @@ port_in_use() {
   if command -v lsof >/dev/null 2>&1; then lsof -i ":${port}" -sTCP:LISTEN >/dev/null 2>&1; return $?; fi
   return 1
 }
-# 多行粘贴：循环读 /dev/tty 直到用户单独输入 END
-paste_until_end() {
-  local marker=${1:-END}
-  local line tmp
-  tmp=$(mktemp)
-  while IFS= read -r line < /dev/tty; do
-    [[ "$line" == "$marker" ]] && break
-    printf '%s\n' "$line" >> "$tmp"
-  done
-  cat "$tmp"
-  rm -f "$tmp"
-}
-
 show_agreement() {
   cat <<'AGREEMENT'
 
@@ -131,6 +118,7 @@ install_command() {
 #!/usr/bin/env bash
 set -Eeuo pipefail
 INSTALL_DIR="${SHOP_PRO_INSTALL_DIR:-/opt/shop-pro}"
+COMMAND_PATH="${SHOP_PRO_COMMAND_PATH:-/usr/local/bin/shop-pro}"
 SOURCE_URL="${SHOP_PRO_SOURCE_URL:-__SOURCE_URL__}"
 ENV_FILE="$INSTALL_DIR/.env"
 DOMAINS_FILE="$INSTALL_DIR/nginx/domains.conf"
@@ -201,13 +189,13 @@ apply_domain_conf() {
   done < "$DOMAINS_FILE"
   reload_nginx
 }
-# 多行粘贴：循环读 /dev/tty 直到单独输入 END
-paste_until_end() {
+# 多行粘贴：粘贴完成后再按一次回车，以空行结束
+paste_pem() {
   local line tmp
   tmp=$(mktemp)
-  printf '（粘贴完成后请单独输入 END 再回车确认）\n'
+  printf '（粘贴完整内容后，再按一次回车确认）\n' >&2
   while IFS= read -r line < /dev/tty; do
-    [[ "$line" == "END" ]] && break
+    [[ -z "$line" ]] && break
     printf '%s\n' "$line" >> "$tmp"
   done
   cat "$tmp"
@@ -254,8 +242,12 @@ install_or_upgrade() {
   port=$(get_env PORT); open_port "$port"
   docker compose --project-directory "$INSTALL_DIR" up -d --build
   apply_domain_conf
+  if [[ -f "$source_root/install.sh" ]]; then
+    SHOP_PRO_COMMAND_ONLY=1 SHOP_PRO_SOURCE_URL="$SOURCE_URL" SHOP_PRO_COMMAND_PATH="$COMMAND_PATH" bash "$source_root/install.sh"
+    printf '管理菜单已同步更新。\n'
+  fi
   rm -rf "$archive" "$extract_root" "$saved_env"
-  printf '安装/升级完成。\n'
+  printf '安装/升级完成。重新执行 shop-pro 即可使用新版菜单。\n'
 }
 uninstall_program() {
   if [[ -f "$DOMAINS_FILE" ]] && [[ -s "$DOMAINS_FILE" ]]; then
@@ -323,11 +315,11 @@ add_ssl() {
   cert_file="${domain}.pem"
   key_file="${domain}.key"
   printf '\n==== 粘贴证书内容 ====\n'
-  cert_content=$(paste_until_end)
-  [[ -n "$cert_content" ]] || { printf '证书内容为空。\n' >&2; return; }
+  cert_content=$(paste_pem)
+  [[ "$cert_content" == *"-----BEGIN CERTIFICATE-----"* && "$cert_content" == *"-----END CERTIFICATE-----"* ]] || { printf '错误：证书内容不完整。\n' >&2; return; }
   printf '\n==== 粘贴私钥内容 ====\n'
-  key_content=$(paste_until_end)
-  [[ -n "$key_content" ]] || { printf '私钥内容为空。\n' >&2; return; }
+  key_content=$(paste_pem)
+  [[ "$key_content" == *"-----BEGIN "*"PRIVATE KEY-----"* && "$key_content" == *"-----END "*"PRIVATE KEY-----"* ]] || { printf '错误：私钥内容不完整。\n' >&2; return; }
   if is_bt_panel; then
     cert_dir="/www/server/panel/vhost/cert/${domain}"
   else
@@ -426,4 +418,9 @@ main() {
   fi
   printf '终端管理命令：shop-pro\n'
 }
+if [[ "${SHOP_PRO_COMMAND_ONLY:-0}" == "1" ]]; then
+  require_root
+  install_command
+  exit 0
+fi
 main "$@"
