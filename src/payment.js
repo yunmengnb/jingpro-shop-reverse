@@ -5,7 +5,7 @@ const decode = value => String(value || '').replaceAll('&amp;', '&').replaceAll(
 export async function resolvePayment(config, data) {
   let url = String(data.payurl || data.pay_url || data.url || '').trim();
   let parsed; try { parsed = new URL(url); } catch { return data; }
-  if (parsed.protocol !== 'https:' || !await hostAllowed(config, parsed.hostname)) return data;
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !await hostAllowed(config, parsed.hostname)) return data;
   let previous = config.upstream + '/', lastDisplayUrl = url, postFields = null;
   for (let step = 0; step < 12; step++) {
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), config.timeout);
@@ -38,6 +38,6 @@ export async function resolvePayment(config, data) {
       return { ...data, actual_pay_content: lastDisplayUrl, resolved_pay_url: lastDisplayUrl, payment_content_type: 'payment_page' };
     } finally { clearTimeout(timer); }
   }
-  if (/^https:/i.test(lastDisplayUrl)) return { ...data, actual_pay_content: lastDisplayUrl, resolved_pay_url: lastDisplayUrl, payment_content_type: 'payment_page' };
+  if (/^https?:/i.test(lastDisplayUrl)) return { ...data, actual_pay_content: lastDisplayUrl, resolved_pay_url: lastDisplayUrl, payment_content_type: 'payment_page' };
   throw new Error('支付跳转次数过多，未获取到支付界面');
 }

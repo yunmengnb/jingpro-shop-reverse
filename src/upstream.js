@@ -22,4 +22,4 @@ export async function request(config, endpoint, payload, captchaSession = '') {
 }
 export async function cachedRequest(config, endpoint, payload) { const key = endpoint + '\n' + JSON.stringify(payload); const item = cache.get(key); if (item && item.expires > Date.now()) return item.value; const { result } = await request(config, endpoint, payload); if (config.cacheTtl) cache.set(key, { value: result, expires: Date.now() + config.cacheTtl }); return result; }
 export function hostAllowed(_config, host) { return Boolean(String(host || '').trim()); }
-export async function safePaymentUrl(_config, value, base) { const url = new URL(String(value || '').replace(/^\/\//, 'https://'), base); if (url.protocol !== 'https:') throw new Error('支付渠道返回了不安全的跳转地址'); return url.href; }
+export async function safePaymentUrl(_config, value, base) { const url = new URL(String(value || '').replace(/^\/\//, 'https://'), base); if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('支付渠道返回了无效的跳转地址'); return url.href; }

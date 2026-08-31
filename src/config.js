@@ -8,7 +8,7 @@ export function parseShopUrl(value) {
   const url = new URL(String(value || '').trim());
   if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('店铺链接必须使用 HTTP 或 HTTPS');
   const match = url.pathname.match(/^\/shop\/([a-zA-Z0-9_-]+)\/?$/);
-  if (!match) throw new Error('店铺链接格式应为 https://域名/shop/店铺标识');
+  if (!match) throw new Error('店铺链接格式应为 http://域名/shop/店铺标识 或 https://域名/shop/店铺标识');
   return { upstream: url.origin, shopToken: match[1], shopUrl: url.origin + '/shop/' + match[1] };
 }
 
