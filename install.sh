@@ -26,7 +26,7 @@ show_agreement() {
 AGREEMENT
   local agreement_answer
   printf '请输入 AGREE 确认接受协议，输入其他内容将退出安装：'
-  IFS= read -r agreement_answer
+  IFS= read -r agreement_answer < /dev/tty
   [[ "$agreement_answer" == 'AGREE' ]] || fail "你未接受使用协议与免责声明，安装已终止。"
 }
 
@@ -103,7 +103,7 @@ open_port() {
 reset_shop_url() {
   [[ -f "$ENV_FILE" ]] || { printf '程序尚未安装，请选择 3。\n'; return; }
   local value
-  printf '请输入新的完整店铺链接：'; IFS= read -r value
+  printf '请输入新的完整店铺链接：'; IFS= read -r value < /dev/tty
   validate_shop_url "$value" || { printf '错误：店铺链接格式无效。\n' >&2; return; }
   set_env SHOP_URL "$value"
   docker compose --project-directory "$INSTALL_DIR" up -d --force-recreate
@@ -112,7 +112,7 @@ reset_shop_url() {
 reset_port() {
   [[ -f "$ENV_FILE" ]] || { printf '程序尚未安装，请选择 3。\n'; return; }
   local value
-  printf '请输入新的运行端口：'; IFS= read -r value
+  printf '请输入新的运行端口：'; IFS= read -r value < /dev/tty
   validate_port "$value" || { printf '错误：端口必须是 1-65535 的数字。\n' >&2; return; }
   set_env PORT "$value"; open_port "$value"
   docker compose --project-directory "$INSTALL_DIR" up -d --force-recreate
@@ -132,8 +132,8 @@ install_or_upgrade() {
   mkdir -p "$INSTALL_DIR"; cp -a "$source_root/." "$INSTALL_DIR/"
   if [[ -s "$saved_env" ]]; then cp "$saved_env" "$ENV_FILE"
   else
-    printf '请输入完整店铺链接（支持 http:// 或 https://）：'; IFS= read -r shop_url; validate_shop_url "$shop_url" || { printf '错误：店铺链接格式无效。\n' >&2; return; }
-    printf '请输入运行端口 [3000]：'; IFS= read -r port; port=${port:-3000}; validate_port "$port" || { printf '错误：端口无效。\n' >&2; return; }
+    printf '请输入完整店铺链接（支持 http:// 或 https://）：'; IFS= read -r shop_url < /dev/tty; validate_shop_url "$shop_url" || { printf '错误：店铺链接格式无效。\n' >&2; return; }
+    printf '请输入运行端口 [3000]：'; IFS= read -r port < /dev/tty; port=${port:-3000}; validate_port "$port" || { printf '错误：端口无效。\n' >&2; return; }
     umask 077; printf 'SHOP_URL=%s\nPORT=%s\nVERIFY_SSL=false\nCACHE_TTL=60\n' "$shop_url" "$port" > "$ENV_FILE"
   fi
   port=$(get_env PORT); open_port "$port"
@@ -150,7 +150,7 @@ uninstall_program() {
 command -v docker >/dev/null 2>&1 || { printf '错误：未安装 Docker。\n' >&2; exit 1; }
 while true; do
   printf '\nshop-pro 管理菜单\n1. 重置店铺链接\n2. 重置运行端口\n3. 安装/升级\n4. 卸载程序（不包括菜单文件）\n0. 退出菜单\n请选择：'
-  IFS= read -r choice
+  IFS= read -r choice < /dev/tty
   case "$choice" in 1) reset_shop_url;; 2) reset_port;; 3) install_or_upgrade;; 4) uninstall_program;; 0) exit 0;; *) printf '错误：请输入 0-4。\n' >&2;; esac
 done
 MENU
@@ -166,9 +166,9 @@ main() {
   command -v docker >/dev/null 2>&1 || fail "未安装 Docker。请先安装 Docker Engine 与 Compose 插件。"
   docker compose version >/dev/null 2>&1 || fail "缺少 docker compose 插件。"
   show_agreement
-  printf '请输入完整店铺链接（支持 http:// 或 https://，示例 http://shop.example.com/shop/demo）：'; IFS= read -r shop_url
+  printf '请输入完整店铺链接（支持 http:// 或 https://，示例 http://shop.example.com/shop/demo）：'; IFS= read -r shop_url < /dev/tty
   validate_shop_url "$shop_url" || fail "店铺链接格式无效。"
-  printf '请输入运行端口 [3000]：'; IFS= read -r port; port=${port:-3000}
+  printf '请输入运行端口 [3000]：'; IFS= read -r port < /dev/tty; port=${port:-3000}
   validate_port "$port" || fail "端口必须是 1-65535 的数字。"
   install_source
   write_env "$shop_url" "$port"
