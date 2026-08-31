@@ -38,9 +38,25 @@ function renderShopContacts(data = {}) {
   if (/^https?:\/\//i.test(contact.url)) { link.textContent = '点击联系客服'; link.href = contact.url; } else { link.textContent = ''; link.removeAttribute('href'); }
 }
 function applyShopInfo(data = {}) {
-  const name = String(data.nickname || data.shop_name || data.name || '').trim();
+  // 尝试从多个可能的字段名中提取店铺名称
+  let name = String(
+    data.nickname || data.shop_name || data.name || data.shopTitle || data.shop_title ||
+    data.shopname || data.shopName || data.title || data.shop ||
+    data.config?.title || data.config?.shop_name || data.config?.nickname ||
+    data.shop?.title || data.shop?.name || data.shop?.nickname ||
+    data.info?.nickname || data.info?.title ||
+    ''
+  ).trim();
+  // 如果还是没有，遍历所有 value，取第一个看起来像店铺名的非空短字符串
+  if (!name) {
+    const candidates = Object.values(data).filter(v => typeof v === 'string' && v.trim() && v.trim().length <= 30 && !/^https?:/i.test(v) && !/^[\d-]+$/.test(v) && !/^[a-f0-9]{32}$/i.test(v));
+    candidates.sort((a, b) => b.length - a.length);
+    name = candidates[0] || '';
+  }
   const notice = String(data.description || data.notice || data.announcement || '').trim();
-  if (name) document.title = name;
+  console.log('[shop] API data:', data);
+  console.log('[shop] detected name:', name);
+  if (name) { document.title = name; const meta = document.querySelector('meta[name="application-name"]'); if (meta) meta.setAttribute('content', name); }
   renderShopContacts(data);
   if (notice) { $('#announcementText').textContent = notice; $('#announcementModal').classList.remove('hidden'); }
 }
