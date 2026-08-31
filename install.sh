@@ -34,13 +34,13 @@ show_agreement() {
 5. 本程序按"现状"提供，不保证持续可用或永久兼容第三方接口。
 6. 因上游变更、网络或支付异常、服务器配置、第三方服务、错误操作造成的损失，程序提供方不承担责任。
 7. 因违法违规、违反第三方协议或超出授权范围使用产生的一切责任由使用者承担。
-8. 完整协议随程序提供于 AGREEMENT.md。输入 AGREE 表示你已完整阅读、理解并接受协议。
+8. 完整协议随程序提供于 AGREEMENT.md。输入 yes 表示你已完整阅读、理解并接受协议。
 ====================================================
 AGREEMENT
   local agreement_answer
-  printf '请输入 AGREE 确认接受协议，输入其他内容将退出安装：'
+  printf '请输入 yes 确认接受协议，输入其他内容将退出安装：'
   IFS= read -r agreement_answer < /dev/tty
-  [[ "$agreement_answer" == 'AGREE' ]] || fail "你未接受使用协议与免责声明，安装已终止。"
+  [[ "$agreement_answer" == 'yes' ]] || fail "你未接受使用协议与免责声明，安装已终止。"
 }
 
 open_port() {
