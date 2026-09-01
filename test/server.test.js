@@ -15,5 +15,5 @@ test('支付地址拒绝本机和私网目标', async () => {
 test('health、静态页可用且不存在网页重置路由', async () => {
   const config = loadConfig({ SHOP_URL:'https://shop.example.com/shop/demo', PORT:'0' });
   const server = createApp(config).listen(0, '127.0.0.1'); await once(server, 'listening'); const base = 'http://127.0.0.1:' + server.address().port;
-  try { const health = await fetch(base + '/api/health').then(v => v.json()); assert.deepEqual(health, { code: 1, msg: 'success', data: { ok: true } }); const page = await fetch(base + '/').then(v => v.text()); assert.match(page, /<title>/); assert.match(page, /id="shopView"/); assert.doesNotMatch(page, /openPaymentPage|新窗口打开/); const reset = await fetch(base + '/shop-pro/reset'); assert.equal(reset.status, 404); } finally { server.close(); }
+  try { const health = await fetch(base + '/api/health').then(v => v.json()); assert.deepEqual(health, { code: 1, msg: 'success', data: { ok: true } }); const page = await fetch(base + '/').then(v => v.text()); assert.match(page, /<title>/); assert.match(page, /id="shopView"/); assert.match(page, /id="paymentQrImage"/); assert.doesNotMatch(page, /paymentFrame|openPaymentPage|新窗口打开/); const reset = await fetch(base + '/shop-pro/reset'); assert.equal(reset.status, 404); } finally { server.close(); }
 });
