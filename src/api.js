@@ -14,7 +14,24 @@ const publicCategories = result => ok(listOf(result).map(item => ({ id: Number(i
 const publicGoods = result => ok(listOf(result).map(item => ({ goods_key: cleanKey(item.goods_key), name: String(item.name || ''), price: Number(item.price || 0), description: String(item.description || ''), image: String(item.image || item.cover || item.pic || item.thumbnail || '') })));
 const publicChannels = result => ok(listOf(result).map(item => ({ id: Number(item.id ?? item.channel_id), name: String(item.show_name ?? item.name ?? item.paytype?.name ?? item.title ?? '') })).filter(item => item.id > 0));
 const publicOrderSummary = item => ({ trade_no: cleanKey(item.trade_no || item.order_no || item.order_id), goods_name: String(item.goods_name || item.name || item.title || ''), create_time: item.create_time || item.created_at || item.add_time || '', amount: Number(item.total_amount ?? item.amount ?? item.price ?? 0), status: item.pay_status ?? item.status ?? '', status_text: String(item.status_text || item.status_name || item.pay_status_text || item.pay_status_name || ''), paid: item.paid === true || [1, '1', 'paid', 'success', 'completed'].includes(item.pay_status ?? item.status), has_cards: Boolean(item.response?.cards || item.cards || item.card_list || item.card_info || item.card || item.kami || item.credentials) });
-const cardStrings = data => { const source = data?.response?.cards ?? data?.cards ?? data?.card_list ?? data?.card_info ?? data?.card ?? data?.kami ?? data?.credentials ?? []; return (Array.isArray(source) ? source : source ? [source] : []).map(item => typeof item === 'object' ? (item.card || item.card_no || item.code || item.content || item.password || '') : item).map(String).filter(Boolean); };
+const cardStrings = data => {
+  const source = data?.response?.cards ?? data?.response?.card_list ?? data?.response?.card_info ?? data?.response?.card ?? data?.response?.kami ?? data?.response?.credentials ?? data?.cards ?? data?.card_list ?? data?.card_info ?? data?.card ?? data?.kami ?? data?.credentials ?? [];
+  const values = Array.isArray(source) ? source : source ? [source] : [];
+  return values.flatMap(item => {
+    if (typeof item !== 'object' || item === null) {
+      const value = String(item || '').trim();
+      if (/^[\[{]/.test(value)) {
+        try { return cardStrings({ cards: JSON.parse(value) }); } catch { return value ? [value] : []; }
+      }
+      return value ? [value] : [];
+    }
+    const value = item.card ?? item.card_no ?? item.code ?? item.content ?? item.kami ?? item.credentials;
+    if (value !== undefined && value !== null) return cardStrings({ cards: value });
+    const account = String(item.account ?? item.username ?? item.user ?? '').trim();
+    const password = String(item.password ?? item.pass ?? item.pwd ?? '').trim();
+    return account || password ? [`${account}${account && password ? ' ' : ''}${password}`] : [];
+  });
+};
 const publicOrderDetail = result => { const data = dataOf(result); return ok({ ...publicOrderSummary(data), cards: cardStrings(data) }); };
 const paymentSessions = new Map();
 const captchaSessions = new Map();
