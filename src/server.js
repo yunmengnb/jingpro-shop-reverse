@@ -20,7 +20,7 @@ export function createApp(config = loadConfig()) {
       if (action) { if (!actions.includes(action)) throw Object.assign(new Error('接口不存在'), { status: 404 }); const query = Object.fromEntries(url.searchParams); if (action === 'captcha-image') { const image = await captchaImage(config, query); res.writeHead(200, { 'content-type': image.type, 'cache-control':'no-store' }); res.end(image.data); return; } json(res, await handleAction(config, action, req.method === 'POST' ? await body(req, config.bodyLimit) : {}, query)); return; }
       if (req.method === 'GET' && staticFile(res, url.pathname)) return;
       json(res, { code:0, msg:'页面不存在' }, 404);
-    } catch (error) { const status = error.status || 502; json(res, { code:0, msg:status < 500 ? (error.message || '请求参数无效') : '服务暂时不可用，请稍后重试' }, status); }
+    } catch (error) { const status = error.status || 502; if (status >= 500) console.error('[request-error]', { action: action || 'static', method: req.method, message: error.message, stack: error.stack }); json(res, { code:0, msg:status < 500 ? (error.message || '请求参数无效') : '服务暂时不可用，请稍后重试' }, status); }
   });
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) { const config = loadConfig(); createApp(config).listen(config.port, '0.0.0.0', () => process.stdout.write('Node shop listening on 0.0.0.0:' + config.port + '\n')); }
