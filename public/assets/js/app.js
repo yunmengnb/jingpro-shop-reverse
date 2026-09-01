@@ -10,9 +10,19 @@ const ACCOUNT_STORAGE_KEY = 'ym_shop_account';
 const ACCOUNT_HISTORY_KEY = 'ym_shop_account_history';
 const API_ENTRY = '/api/index.php';
 
-async function api(path, body) {
+async function api(path, body, timeout = 0) {
   const url = `${API_ENTRY}?action=${encodeURIComponent(path)}`;
-  const response = await fetch(url, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const controller = timeout ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeout) : null;
+  let response;
+  try {
+    response = await fetch(url, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: controller?.signal } : { signal: controller?.signal });
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('服务器获取支付页面超时，请关闭后重试');
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   const raw = await response.text();
   let result;
   try {
@@ -163,7 +173,7 @@ function showPaymentPage(url) {
   $('#paymentBrowserUrl').classList.add('hidden');
   $('#payStatus').textContent = '请在上方支付页面完成付款';
 }
-async function openPayment(data) { const payment = paymentFields(data); if (!payment.orderNo || !payment.paymentId) throw new Error('支付会话创建失败'); state.payment = payment; $('#orderText').textContent = `订单号：${payment.orderNo}`; state.currentOrder = payment.orderNo; saveOrderSession(payment.orderNo, payment.paymentId); savePendingPayment(payment); saveOrder(payment.orderNo); $('#paymentModal').classList.remove('hidden'); $('#paymentFrame').classList.add('hidden'); $('#paymentBrowserUrl').classList.remove('hidden'); $('#paymentBrowserUrl').textContent = '服务器正在打开最终支付页面…'; pollOrder(payment.orderNo); const result = await api('payment-page', { payment_id: payment.paymentId }); showPaymentPage(result.url); }
+async function openPayment(data) { const payment = paymentFields(data); if (!payment.orderNo || !payment.paymentId) throw new Error('支付会话创建失败'); state.payment = payment; $('#orderText').textContent = `订单号：${payment.orderNo}`; state.currentOrder = payment.orderNo; saveOrderSession(payment.orderNo, payment.paymentId); savePendingPayment(payment); saveOrder(payment.orderNo); $('#paymentModal').classList.remove('hidden'); $('#paymentFrame').classList.add('hidden'); $('#paymentBrowserUrl').classList.remove('hidden'); $('#paymentBrowserUrl').textContent = '服务器正在打开最终支付页面…'; $('#payStatus').textContent = '正在跟踪支付平台跳转…'; pollOrder(payment.orderNo); try { const result = await api('payment-page', { payment_id: payment.paymentId }, 35000); showPaymentPage(result.url); } catch (error) { $('#paymentBrowserUrl').classList.remove('hidden'); $('#paymentBrowserUrl').textContent = error.message || '最终支付页面获取失败，请关闭后重试'; $('#payStatus').textContent = '支付页面加载失败'; throw error; } }
 async function createOrder() {
   $('#message').textContent = '';
   if (!state.selected || !state.channelId || !state.account) {

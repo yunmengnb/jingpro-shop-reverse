@@ -18,17 +18,20 @@ export async function resolvePaymentInBrowser(config, entryUrl, upstreamSession 
         await route.abort('blockedbyclient');
       }
     });
-    await page.goto(entryUrl, { waitUntil: 'domcontentloaded', timeout: config.timeout });
+    await page.goto(entryUrl, { waitUntil: 'commit', timeout: config.timeout });
     let lastUrl = page.url();
-    let stableRounds = 0;
-    const deadline = Date.now() + Math.max(config.timeout, 15000);
-    while (Date.now() < deadline && stableRounds < 3) {
-      await page.waitForTimeout(1000);
+    let stableSince = Date.now();
+    const deadline = Date.now() + Math.min(Math.max(config.timeout, 10000), 30000);
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(500);
       const currentUrl = page.url();
-      if (currentUrl === lastUrl) stableRounds++;
-      else { lastUrl = currentUrl; stableRounds = 0; }
+      if (currentUrl !== lastUrl) {
+        lastUrl = currentUrl;
+        stableSince = Date.now();
+      }
+      if (Date.now() - stableSince >= 2000) break;
     }
-    return await safePaymentUrl(config, page.url(), entryUrl);
+    return await safePaymentUrl(config, lastUrl, entryUrl);
   } finally {
     await context.close();
     await browser.close();
