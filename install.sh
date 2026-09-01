@@ -161,6 +161,8 @@ list_domains() {
 }
 set_domain_record() {
   local domain=$1 cert_file=$2 key_file=$3
+  mkdir -p "$(dirname "$DOMAINS_FILE")"
+  touch "$DOMAINS_FILE"
   awk -v d="$domain" -v cf="$cert_file" -v kf="$key_file" -F'|' 'BEGIN{OFS="|"} $1==d{print d,cf,kf; found=1; next}{print} END{if(!found) print d,cf,kf}' "$DOMAINS_FILE" > "${DOMAINS_FILE}.new" && mv "${DOMAINS_FILE}.new" "$DOMAINS_FILE"
 }
 remove_domain_record() { local domain=$1; grep -v "^${domain}|" "$DOMAINS_FILE" > "${DOMAINS_FILE}.new" 2>/dev/null || true; mv "${DOMAINS_FILE}.new" "$DOMAINS_FILE"; }
