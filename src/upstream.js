@@ -1,4 +1,3 @@
-// 忆梦云团队开发
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
 

@@ -1,4 +1,3 @@
-// 忆梦云团队开发
 import crypto from 'node:crypto';
 import { cachedRequest, cleanKey, inputError, request, safePaymentUrl, sessionToken, validateContact } from './upstream.js';
 import { resolvePaymentInBrowser } from './payment-browser.js';

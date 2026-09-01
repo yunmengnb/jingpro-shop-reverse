@@ -1,4 +1,3 @@
-// 忆梦云团队开发
 'use strict';
 
 const $ = (selector) => document.querySelector(selector);

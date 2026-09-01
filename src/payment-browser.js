@@ -1,4 +1,3 @@
-// 忆梦云团队开发
 import { chromium } from 'playwright-core';
 import { safePaymentUrl } from './upstream.js';
 

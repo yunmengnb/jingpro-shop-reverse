@@ -1,4 +1,3 @@
-// 忆梦云团队开发
 import http from 'node:http';
 import { createReadStream, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';

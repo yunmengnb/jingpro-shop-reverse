@@ -1,4 +1,3 @@
-# 忆梦云团队开发
 services:
   shop:
     build: .

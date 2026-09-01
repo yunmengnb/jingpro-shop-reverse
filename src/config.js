@@ -1,4 +1,3 @@
-// 忆梦云团队开发
 import { URL } from 'node:url';
 
 const bool = (value, fallback = false) => value === undefined ? fallback : /^(1|true|yes|on)$/i.test(value);

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# 忆梦云团队开发
 set -Eeuo pipefail
 
 readonly INSTALL_DIR="${SHOP_PRO_INSTALL_DIR:-/opt/shop-pro}"
@@ -88,7 +87,7 @@ write_env() {
   local shop_url=$1 port=$2
   umask 077
   cat > "$INSTALL_DIR/.env" <<EOF
-# 忆梦云团队开发；由 install.sh 生成
+# 由 install.sh 生成
 SHOP_URL=$shop_url
 PORT=$port
 VERIFY_SSL=false

@@ -1,4 +1,3 @@
-// 忆梦云团队开发
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { once } from 'node:events';
