@@ -191,13 +191,19 @@ apply_domain_conf() {
   done < "$DOMAINS_FILE"
   reload_nginx
 }
-# 多行粘贴：粘贴完成后再按一次回车，以空行结束
+# 多行粘贴：允许证书链中存在空行，连续两个空行才结束输入
 paste_pem() {
-  local line tmp
+  local line tmp empty_count=0
   tmp=$(mktemp)
-  printf '（粘贴完整内容后，再按一次回车确认）\n' >&2
+  printf '（粘贴完整内容后，连续按两次回车确认）\n' >&2
   while IFS= read -r line < /dev/tty; do
-    [[ -z "$line" ]] && break
+    if [[ -z "$line" ]]; then
+      empty_count=$((empty_count + 1))
+      ((empty_count >= 2)) && break
+      printf '\n' >> "$tmp"
+      continue
+    fi
+    empty_count=0
     printf '%s\n' "$line" >> "$tmp"
   done
   cat "$tmp"
