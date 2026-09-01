@@ -1,5 +1,6 @@
 // 忆梦云团队开发
 import { hostAllowed, safePaymentUrl } from './upstream.js';
+import { resolvePaymentInBrowser } from './payment-browser.js';
 
 const decode = value => String(value || '').replaceAll('&amp;', '&').replaceAll('\/', '/').replaceAll('\u0026', '&').replaceAll('\u003d', '=').replaceAll('\x26', '&').replaceAll('\x3d', '=');
 const CALLBACK_PATH = /(?:^|[\/_-])(?:notify|notification|callback|webhook|return|query|status|success)(?:[\/_-]|$)/i;
@@ -25,13 +26,25 @@ function isEntryUrl(config, value) {
 
 function paymentPageResult(data, value) {
   if (!value || isCallbackUrl(value)) throw new Error('未获取到有效的最终支付页面');
-  return { ...data, payment_page_url: value, resolved_pay_url: value, payment_content_type: 'payment_page' };
+  const result = { ...data };
+  delete result.actual_pay_content;
+  delete result.actual_qr_image;
+  delete result.qrcode;
+  delete result.qr_code;
+  delete result.qr;
+  delete result.code_url;
+  return { ...result, actual_pay_content: '', actual_qr_image: '', payment_page_url: value, resolved_pay_url: value, payment_content_type: 'payment_page' };
 }
 
 export async function resolvePayment(config, data) {
   let url = String(data.payurl || data.pay_url || data.url || '').trim();
   let parsed; try { parsed = new URL(url); } catch { return data; }
   if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !await hostAllowed(config, parsed.hostname)) return data;
+  try {
+    return await resolvePaymentInBrowser(config, data);
+  } catch (browserError) {
+    console.warn('浏览器支付解析失败，回退到 HTTP 解析：', browserError.message);
+  }
   let previous = config.upstream + '/', lastPaymentPage = '', postFields = null;
   for (let step = 0; step < 12; step++) {
     const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), config.timeout);

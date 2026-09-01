@@ -159,7 +159,7 @@ function paymentFields(source = {}) {
 }
 function renderPaymentCode(payment) {
   const qrBox = $('#qrImage');
-  const content = payment.qr || payment.image || payment.paymentPageUrl;
+  const content = payment.contentType === 'payment_page' ? payment.paymentPageUrl : (payment.qr || payment.image || payment.paymentPageUrl);
   if (!content) throw new Error(payment.warning || '未能获取最终支付二维码或支付页面');
   qrBox.innerHTML = '';
   if (payment.image && /^(?:https?:\/\/|data:image\/)/i.test(payment.image)) { const image = document.createElement('img'); image.src = payment.image; image.alt = '最终支付二维码'; qrBox.appendChild(image); }
@@ -174,7 +174,7 @@ async function resolvePayment() {
   $('#qrImage').classList.add('hidden'); $('#paymentBrowser').classList.remove('hidden'); $('#paymentBrowserUrl').textContent = 'Node.js 后端正在获取最终收款码…'; $('#payStatus').textContent = '正在获取最终支付二维码…';
   try {
     let resolved = payment;
-    if (!resolved.qr && !resolved.image && resolved.entryUrl) resolved = paymentFields({ ...resolved, ...await api('payment-resolve', { payurl: resolved.entryUrl, session_token: resolved.sessionToken }) });
+    if (resolved.entryUrl) resolved = paymentFields({ ...resolved, ...await api('payment-resolve', { payurl: resolved.entryUrl, session_token: resolved.sessionToken }) });
     if (requestId !== state.paymentRequest) return;
     state.payment = resolved;
     renderPaymentCode(resolved);
