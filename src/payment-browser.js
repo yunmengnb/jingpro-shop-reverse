@@ -18,7 +18,15 @@ export async function resolvePaymentInBrowser(config, data) {
     if (data.session_token) await context.addCookies([{ name: 'PHPSESSID', value: String(data.session_token), url: config.upstream + '/' }]);
     const page = await context.newPage();
     await page.goto(entryUrl, { waitUntil: 'domcontentloaded', timeout: config.timeout });
-    await page.waitForTimeout(Math.min(5000, config.timeout));
+    let stableUrl = page.url();
+    let stableRounds = 0;
+    const deadline = Date.now() + Math.max(config.timeout, 15000);
+    while (Date.now() < deadline && stableRounds < 3) {
+      await page.waitForTimeout(1000);
+      const currentUrl = page.url();
+      if (currentUrl === stableUrl) stableRounds++;
+      else { stableUrl = currentUrl; stableRounds = 0; }
+    }
     const finalUrl = page.url();
     if (finalUrl === entryUrl || isCallbackUrl(finalUrl)) throw new Error('未跳转到有效的最终支付页面');
     return cleanResult(data, finalUrl);

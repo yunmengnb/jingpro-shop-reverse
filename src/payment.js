@@ -1,104 +1,27 @@
 // 忆梦云团队开发
-import { hostAllowed, safePaymentUrl } from './upstream.js';
+import { hostAllowed } from './upstream.js';
 import { resolvePaymentInBrowser } from './payment-browser.js';
 
-const decode = value => String(value || '').replaceAll('&amp;', '&').replaceAll('\/', '/').replaceAll('\u0026', '&').replaceAll('\u003d', '=').replaceAll('\x26', '&').replaceAll('\x3d', '=');
 const CALLBACK_PATH = /(?:^|[\/_-])(?:notify|notification|callback|webhook|return|query|status|success)(?:[\/_-]|$)/i;
 
 export function isCallbackUrl(value) {
   try {
-    const url = new URL(value);
-    return CALLBACK_PATH.test(url.pathname);
+    return CALLBACK_PATH.test(new URL(value).pathname);
   } catch {
     return true;
   }
-}
-
-function isEntryUrl(config, value) {
-  try {
-    const current = new URL(value);
-    const upstream = new URL(config.upstream);
-    return current.hostname === upstream.hostname && current.pathname.startsWith('/shopApi/Pay/payment');
-  } catch {
-    return true;
-  }
-}
-
-function paymentPageResult(data, value) {
-  if (!value || isCallbackUrl(value)) throw new Error('未获取到有效的最终支付页面');
-  const result = { ...data };
-  delete result.actual_pay_content;
-  delete result.actual_qr_image;
-  delete result.qrcode;
-  delete result.qr_code;
-  delete result.qr;
-  delete result.code_url;
-  return { ...result, actual_pay_content: '', actual_qr_image: '', payment_page_url: value, resolved_pay_url: value, payment_content_type: 'payment_page' };
 }
 
 export async function resolvePayment(config, data) {
-  let url = String(data.payurl || data.pay_url || data.url || '').trim();
-  let parsed; try { parsed = new URL(url); } catch { return data; }
-  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !await hostAllowed(config, parsed.hostname)) return data;
+  const entryUrl = String(data.payurl || data.pay_url || data.url || '').trim();
+  let parsed;
   try {
-    return await resolvePaymentInBrowser(config, data);
-  } catch (browserError) {
-    console.warn('浏览器支付解析失败，回退到 HTTP 解析：', browserError.message);
+    parsed = new URL(entryUrl);
+  } catch {
+    throw new Error('支付接口未返回有效的支付页面地址');
   }
-  let previous = config.upstream + '/', lastPaymentPage = '', postFields = null;
-  for (let step = 0; step < 12; step++) {
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), config.timeout);
-    try {
-      const headers = { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/*,*/*;q=0.8', referer: previous, 'user-agent': 'Mozilla/5.0 Chrome/140 Safari/537.36' };
-      if (new URL(url).hostname === new URL(config.upstream).hostname && data.session_token) headers.cookie = 'PHPSESSID=' + data.session_token;
-      if (postFields !== null) headers['content-type'] = 'application/x-www-form-urlencoded';
-      const response = await fetch(url, { method: postFields === null ? 'GET' : 'POST', headers, body: postFields, redirect: 'manual', signal: controller.signal });
-      if (response.status >= 400) throw new Error('支付渠道响应异常（HTTP ' + response.status + '）');
-      const location = response.headers.get('location');
-      if (location) {
-        previous = url;
-        const nextUrl = await safePaymentUrl(config, location, url);
-        if (!isCallbackUrl(nextUrl) && !isEntryUrl(config, nextUrl)) lastPaymentPage = nextUrl;
-        url = nextUrl; postFields = null; continue;
-      }
-      const type = response.headers.get('content-type') || '';
-      if (type.toLowerCase().startsWith('image/')) return { ...data, actual_qr_image: url, resolved_pay_url: url, payment_content_type: 'qr_image' };
-      if (postFields === null && !isCallbackUrl(url) && !isEntryUrl(config, url) && !/^(?:openapi|gateway)\.alipay\.com$/i.test(new URL(url).hostname)) lastPaymentPage = url;
-      const html = (await response.text()).slice(0, 4194304); const source = decode(html);
-      const patterns = [/https:\/\/qr\.alipay\.com\/[a-zA-Z0-9]+/i, /https:\/\/mobilecodec\.alipay\.com\/show\.htm\?code=[a-zA-Z0-9]+/i, /["']?(?:qrCode|qrCodeUrl|code_url|codeUrl|qr_code|qrcode|qrUrl|nativeUrl|payInfo)["']?\s*[:=]\s*["']([^"']+)["']/i, /(?:new\s+)?QRCode\s*\([^,]+,\s*(?:\{[^}]*text\s*:\s*)?["']([^"']+)["']/i];
-      for (const pattern of patterns) {
-        const match = source.match(pattern); if (!match) continue;
-        const qr = decode(match[1] || match[0]);
-        if (/^(?:alipays?:|weixin:|wxp:)/i.test(qr)) return { ...data, actual_pay_content: qr, payment_content_type: 'qr_content' };
-        if (/^https?:/i.test(qr)) {
-          const qrUrl = await safePaymentUrl(config, qr, url);
-          if (!isCallbackUrl(qrUrl)) return { ...data, actual_pay_content: qrUrl, resolved_pay_url: url, payment_content_type: 'qr_content' };
-        }
-      }
-      const autoSubmit = /(?:document\.(?:forms\[[^\]]+\]|getElementById\([^)]+\))|[a-zA-Z_$][\w$]*)\.submit\s*\(/i.test(source);
-      const forms = source.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi);
-      let followedForm = false;
-      for (const form of forms) {
-        const formUrl = await safePaymentUrl(config, form[1].match(/action=["']([^"']+)["']/i)?.[1] || url, url);
-        const host = new URL(formUrl).hostname;
-        if (isCallbackUrl(formUrl) || (!autoSubmit && !/(?:openapi|excashier|cashier|gateway)\.alipay\.com$/i.test(host)) || /help\.alipay\.com|\/support\/search|search_new_result/i.test(formUrl)) continue;
-        const fields = new URLSearchParams();
-        for (const input of form[2].matchAll(/<input\b([^>]*)>/gi)) { const name = input[1].match(/name=["']([^"']+)["']/i)?.[1]; if (name) fields.set(decode(name), decode(input[1].match(/value=["']([^"']*)["']/i)?.[1] || '')); }
-        previous = url; url = formUrl; const method = form[1].match(/method=["']([^"']+)["']/i)?.[1]?.toUpperCase() || 'GET'; postFields = method === 'POST' ? fields.toString() : null; if (method !== 'POST' && fields.size) { const target = new URL(url); for (const [key, value] of fields) target.searchParams.set(key, value); url = target.href; }
-        if (!isEntryUrl(config, url)) lastPaymentPage = url;
-        followedForm = true; break;
-      }
-      if (followedForm) continue;
-      const jump = source.match(/(?:(?:window|top)\.)?location(?:\.href)?\s*=\s*["']([^"']+)["']/i) || source.match(/location\.replace\s*\(\s*["']([^"']+)["']/i) || source.match(/<iframe[^>]+src=["']([^"']+)["']/i) || source.match(/<meta[^>]+http-equiv=["']refresh["'][^>]+content=["'][^;]+;\s*url=([^"']+)/i);
-      if (jump) {
-        const nextUrl = await safePaymentUrl(config, decode(jump[1]), url);
-        if (isCallbackUrl(nextUrl)) return paymentPageResult(data, lastPaymentPage);
-        previous = url; url = nextUrl; postFields = null;
-        if (!isEntryUrl(config, nextUrl)) lastPaymentPage = nextUrl;
-        continue;
-      }
-      return paymentPageResult(data, lastPaymentPage);
-    } finally { clearTimeout(timer); }
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !await hostAllowed(config, parsed.hostname)) {
+    throw new Error('支付页面地址不可用');
   }
-  return paymentPageResult(data, lastPaymentPage);
+  return resolvePaymentInBrowser(config, data);
 }

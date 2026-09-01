@@ -155,7 +155,7 @@ async function selectGoods(card) {
 }
 async function updatePrice() { if (!state.selected || !state.channelId) return; const requestId = ++state.priceRequest; const goodsKey = state.selected.goods_key; const channelId = state.channelId; const quantity = Number($('#quantity').value) || 1; try { const data = await api('price', { goods_key: goodsKey, channel_id: channelId, quantity }); if (requestId !== state.priceRequest) return; $('#total').textContent = `￥${Number(data.total_amount ?? data.amount ?? state.selected.price).toFixed(2)}`; } catch (error) { if (requestId === state.priceRequest) $('#message').textContent = error.message; } }
 function paymentFields(source = {}) {
-  return { orderNo: source.trade_no || source.order_no || source.order_id || source.id || '', entryUrl: source.payurl || source.pay_url || '', qr: source.actual_pay_content || source.qrcode || source.qr_code || source.qr || source.code_url || '', image: source.actual_qr_image || source.qrcode_url || source.qr_image || source.image || '', paymentPageUrl: source.payment_page_url || '', sessionToken: source.session_token || '', warning: source.payment_resolver_warning || '', contentType: source.payment_content_type || '' };
+  return { orderNo: source.trade_no || source.order_no || source.order_id || source.id || '', entryUrl: source.payurl || source.pay_url || source.url || '', paymentPageUrl: source.payment_page_url || '', sessionToken: source.session_token || '', warning: source.payment_resolver_warning || '' };
 }
 function showPaymentPage(payment) {
   const url = payment.paymentPageUrl;
@@ -183,10 +183,10 @@ async function resolvePayment() {
   } catch (error) {
     if (requestId !== state.paymentRequest) return;
     $('#paymentBrowserUrl').textContent = '支付页面加载失败';
-    $('#payStatus').innerHTML = `<span class="payment-error">${escapeHtml(error.message)}</span><button class="retry-button payment-retry" type="button" data-retry="payment">重新解析</button>`;
+    $('#payStatus').innerHTML = `<span class="payment-error">${escapeHtml(error.message)}</span><button class="retry-button payment-retry" type="button" data-retry="payment">重新获取最终地址</button>`;
   }
 }
-async function openPayment(data) { const payment = paymentFields(data); if (!payment.entryUrl && !payment.qr && !payment.image) throw new Error('上游未返回支付二维码或支付链接'); state.payment = payment; $('#orderText').textContent = payment.orderNo ? `订单号：${payment.orderNo}` : ''; state.currentOrder = payment.orderNo; saveOrderSession(payment.orderNo, payment.sessionToken); savePendingPayment(payment); saveOrder(payment.orderNo); $('#paymentModal').classList.remove('hidden'); if (payment.orderNo) pollOrder(payment.orderNo); await resolvePayment(); }
+async function openPayment(data) { const payment = paymentFields(data); if (!payment.entryUrl) throw new Error('上游未返回支付页面地址'); state.payment = payment; $('#orderText').textContent = payment.orderNo ? `订单号：${payment.orderNo}` : ''; state.currentOrder = payment.orderNo; saveOrderSession(payment.orderNo, payment.sessionToken); savePendingPayment(payment); saveOrder(payment.orderNo); $('#paymentModal').classList.remove('hidden'); if (payment.orderNo) pollOrder(payment.orderNo); await resolvePayment(); }
 async function createOrder() {
   $('#message').textContent = '';
   if (!state.selected || !state.channelId || !state.account) {
