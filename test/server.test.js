@@ -4,15 +4,9 @@ import test from 'node:test';
 import { once } from 'node:events';
 import { createApp } from '../src/server.js';
 import { loadConfig, parseShopUrl } from '../src/config.js';
-import { isCallbackUrl } from '../src/payment.js';
 
 test('解析完整店铺链接', () => assert.deepEqual(parseShopUrl('https://shop.example.com/shop/demo'), { upstream:'https://shop.example.com', shopToken:'demo', shopUrl:'https://shop.example.com/shop/demo' }));
 test('拒绝无店铺标识的链接', () => assert.throws(() => parseShopUrl('https://shop.example.com/shop/')));
-test('识别支付通知和回调接口', () => {
-  assert.equal(isCallbackUrl('https://pay.example.com/api/pay/notify'), true);
-  assert.equal(isCallbackUrl('https://pay.example.com/payment/callback/result'), true);
-  assert.equal(isCallbackUrl('https://pay.example.com/cashier/order/123'), false);
-});
 test('health、静态页可用且不存在网页重置路由', async () => {
   const config = loadConfig({ SHOP_URL:'https://shop.example.com/shop/demo', PORT:'0' });
   const server = createApp(config).listen(0, '127.0.0.1'); await once(server, 'listening'); const base = 'http://127.0.0.1:' + server.address().port;

@@ -9,9 +9,6 @@
     "check": "node --check src/server.js",
     "test": "node --test test/server.test.js"
   },
-  "dependencies": {
-    "playwright-core": "^1.55.0"
-  },
   "engines": {
     "node": ">=22"
   }

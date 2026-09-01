@@ -169,24 +169,7 @@ function showPaymentPage(payment) {
   openLink.classList.remove('hidden');
   $('#payStatus').textContent = '请在上方支付页面完成付款；若页面无法显示，请点击“新窗口打开”';
 }
-async function resolvePayment() {
-  const payment = state.payment;
-  if (!payment) return;
-  const requestId = ++state.paymentRequest;
-  $('#paymentFrame').classList.add('hidden'); $('#paymentFrame').removeAttribute('src'); $('#openPaymentPage').classList.add('hidden'); $('#paymentBrowserUrl').classList.remove('hidden'); $('#paymentBrowserUrl').textContent = 'Node.js 后端正在打开最终支付页面…'; $('#payStatus').textContent = '正在获取最终支付页面…';
-  try {
-    let resolved = payment;
-    if (resolved.entryUrl) resolved = paymentFields({ ...resolved, ...await api('payment-resolve', { payurl: resolved.entryUrl, session_token: resolved.sessionToken }) });
-    if (requestId !== state.paymentRequest) return;
-    state.payment = resolved;
-    showPaymentPage(resolved);
-  } catch (error) {
-    if (requestId !== state.paymentRequest) return;
-    $('#paymentBrowserUrl').textContent = '支付页面加载失败';
-    $('#payStatus').innerHTML = `<span class="payment-error">${escapeHtml(error.message)}</span><button class="retry-button payment-retry" type="button" data-retry="payment">重新获取最终地址</button>`;
-  }
-}
-async function openPayment(data) { const payment = paymentFields(data); if (!payment.entryUrl) throw new Error('上游未返回支付页面地址'); state.payment = payment; $('#orderText').textContent = payment.orderNo ? `订单号：${payment.orderNo}` : ''; state.currentOrder = payment.orderNo; saveOrderSession(payment.orderNo, payment.sessionToken); savePendingPayment(payment); saveOrder(payment.orderNo); $('#paymentModal').classList.remove('hidden'); if (payment.orderNo) pollOrder(payment.orderNo); await resolvePayment(); }
+function openPayment(data) { const payment = paymentFields(data); if (!payment.entryUrl) throw new Error('上游未返回支付页面地址'); state.payment = payment; $('#orderText').textContent = payment.orderNo ? `订单号：${payment.orderNo}` : ''; state.currentOrder = payment.orderNo; saveOrderSession(payment.orderNo, payment.sessionToken); savePendingPayment(payment); saveOrder(payment.orderNo); $('#paymentModal').classList.remove('hidden'); if (payment.orderNo) pollOrder(payment.orderNo); showPaymentPage({ ...payment, paymentPageUrl: payment.entryUrl }); }
 async function createOrder() {
   $('#message').textContent = '';
   if (!state.selected || !state.channelId || !state.account) {
@@ -246,7 +229,6 @@ async function showOrderDetail(tradeNo, queryPassword = '') { $('#paymentModal')
 $('#goods').addEventListener('click', (event) => { const retry = event.target.closest('[data-retry="goods"]'); if (retry) { loadGoods(Number($('.category.active')?.dataset.id ?? -1), $('#search').value.trim()); return; } const card = event.target.closest('.goods-card'); if (card) selectGoods(card); });
 $('#goods').addEventListener('keydown', (event) => { if (event.key === 'Enter') { const card = event.target.closest('.goods-card'); if (card) selectGoods(card); } });
 $('#categories').addEventListener('click', (event) => { if (event.target.closest('[data-retry="categories"]')) { initializeApp(); return; } const button = event.target.closest('.category'); if (!button) return; document.querySelectorAll('.category').forEach((item) => item.classList.toggle('active', item === button)); loadGoods(Number(button.dataset.id)); });
-$('#payStatus').addEventListener('click', (event) => { if (event.target.closest('[data-retry="payment"]')) resolvePayment(); });
 $('#channels').addEventListener('click', (event) => { if (event.target.closest('[data-retry="channels"]')) { const card = Array.from(document.querySelectorAll('.goods-card')).find((item) => item.dataset.key === String(state.selected?.goods_key)); if (card) selectGoods(card); return; } const button = event.target.closest('.channel'); if (!button) return; state.channelId = Number(button.dataset.id); document.querySelectorAll('.channel').forEach((item) => item.classList.toggle('active', item === button)); updatePrice(); });
 $('#quantity').addEventListener('change', updatePrice); $('#payButton').addEventListener('click', createOrder); $('#closeModal').addEventListener('click', () => { $('#paymentModal').classList.add('hidden'); $('#paymentFrame').removeAttribute('src'); clearInterval(state.timer); });
 $('#showShop').addEventListener('click', () => showView(false)); $('#showOrders').addEventListener('click', () => showView(true)); $('#refreshOrders').addEventListener('click', loadOrders); $('#ordersView').addEventListener('click', (event) => { const button = event.target.closest('.detail-button'); if (!button) return; const password = button.dataset.password === '1' ? prompt('请输入下单时设置的安全密码') : ''; if (password !== null) showOrderDetail(button.dataset.order, password); }); $('#closeOrderModal').addEventListener('click', () => $('#orderModal').classList.add('hidden')); $('#orderModal').addEventListener('click', (event) => { if (event.target === $('#orderModal')) $('#closeOrderModal').click(); }); $('#orderDetail').addEventListener('click', async (event) => { const button = event.target.closest('.copy-card'); if (!button) return; const text = button.classList.contains('copy-all') ? Array.from($('#orderDetail').querySelectorAll('.copy-card[data-card]')).map((item) => item.dataset.card).join('\n') : button.dataset.card; try { await copyText(text); copyFeedback(button, true); } catch (error) { copyFeedback(button, false); } });

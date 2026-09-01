@@ -1,10 +1,8 @@
 # 忆梦云团队开发
 FROM node:22-alpine
 WORKDIR /app
-ENV NODE_ENV=production PORT=3000 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+ENV NODE_ENV=production PORT=3000
 COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
 COPY src ./src
 COPY public ./public
 USER node
