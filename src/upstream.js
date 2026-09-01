@@ -22,4 +22,18 @@ export async function request(config, endpoint, payload, captchaSession = '') {
 }
 export async function cachedRequest(config, endpoint, payload) { const key = endpoint + '\n' + JSON.stringify(payload); const item = cache.get(key); if (item && item.expires > Date.now()) return item.value; const { result } = await request(config, endpoint, payload); if (config.cacheTtl) cache.set(key, { value: result, expires: Date.now() + config.cacheTtl }); return result; }
 export function hostAllowed(_config, host) { return Boolean(String(host || '').trim()); }
-export async function safePaymentUrl(_config, value, base) { const url = new URL(String(value || '').replace(/^\/\//, 'https://'), base); if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('支付渠道返回了无效的跳转地址'); return url.href; }
+const privateAddress = address => {
+  if (net.isIPv4(address)) {
+    const [a, b] = address.split('.').map(Number);
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const value = String(address).toLowerCase();
+  return value === '::1' || value === '::' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') || value.startsWith('::ffff:127.') || value.startsWith('::ffff:10.') || value.startsWith('::ffff:192.168.');
+};
+export async function safePaymentUrl(_config, value, base) {
+  const url = new URL(String(value || '').replace(/^\/\//, 'https://'), base);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('支付渠道返回了无效的跳转地址');
+  const records = await lookup(url.hostname, { all: true, verbatim: true });
+  if (!records.length || records.some(record => privateAddress(record.address))) throw new Error('支付渠道返回了不安全的跳转地址');
+  return url.href;
+}

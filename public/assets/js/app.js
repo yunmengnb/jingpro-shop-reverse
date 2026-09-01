@@ -2,7 +2,7 @@
 'use strict';
 
 const $ = (selector) => document.querySelector(selector);
-const state = { categories: [], goods: [], selected: null, channelId: 0, timer: null, currentOrder: '', captcha: null, captchaResolve: null, account: '', orderAuthorization: null, orders: [], ordersLoading: null, orderSessions: new Map(), goodsRequest: 0, channelsRequest: 0, priceRequest: 0, paymentRequest: 0, payment: null };
+const state = { categories: [], goods: [], selected: null, channelId: 0, timer: null, currentOrder: '', captcha: null, captchaResolve: null, account: '', orderAuthorization: null, orders: [], ordersLoading: null, paymentSessions: new Map(), goodsRequest: 0, channelsRequest: 0, priceRequest: 0, paymentRequest: 0, payment: null };
 const ORDER_STORAGE_KEY = 'ym_shop_orders';
 const ORDER_SESSION_STORAGE_KEY = 'ym_shop_order_sessions';
 const PENDING_PAYMENT_STORAGE_KEY = 'ym_shop_pending_payment';
@@ -54,8 +54,6 @@ function applyShopInfo(data = {}) {
     name = candidates[0] || '';
   }
   const notice = String(data.description || data.notice || data.announcement || '').trim();
-  console.log('[shop] API data:', data);
-  console.log('[shop] detected name:', name);
   if (name) { document.title = name; const meta = document.querySelector('meta[name="application-name"]'); if (meta) meta.setAttribute('content', name); }
   renderShopContacts(data);
   if (notice) { $('#announcementText').textContent = notice; $('#announcementModal').classList.remove('hidden'); }
@@ -63,9 +61,9 @@ function applyShopInfo(data = {}) {
 async function loadShopInfo() { try { applyShopInfo(await api('shop')); } catch { renderShopContacts(); } }
 function localOrders() { try { return JSON.parse(localStorage.getItem(ORDER_STORAGE_KEY) || '[]').filter((item) => typeof item === 'string'); } catch { return []; } }
 function saveOrder(orderNo) { if (orderNo) localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify([orderNo, ...localOrders().filter((item) => item !== orderNo)].slice(0, 50))); }
-function restoreOrderSessions() { try { const saved = JSON.parse(sessionStorage.getItem(ORDER_SESSION_STORAGE_KEY) || '{}'); state.orderSessions = new Map(Object.entries(saved).filter(([orderNo, token]) => orderNo && typeof token === 'string' && token)); } catch { state.orderSessions = new Map(); } }
-function saveOrderSession(orderNo, token) { if (!orderNo || !token) return; state.orderSessions.set(String(orderNo), token); sessionStorage.setItem(ORDER_SESSION_STORAGE_KEY, JSON.stringify(Object.fromEntries(state.orderSessions))); }
-function clearOrderSessions() { state.orderSessions.clear(); sessionStorage.removeItem(ORDER_SESSION_STORAGE_KEY); sessionStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY); }
+function restoreOrderSessions() { try { const saved = JSON.parse(sessionStorage.getItem(ORDER_SESSION_STORAGE_KEY) || '{}'); state.paymentSessions = new Map(Object.entries(saved).filter(([orderNo, id]) => orderNo && typeof id === 'string' && id)); } catch { state.paymentSessions = new Map(); } }
+function saveOrderSession(orderNo, id) { if (!orderNo || !id) return; state.paymentSessions.set(String(orderNo), id); sessionStorage.setItem(ORDER_SESSION_STORAGE_KEY, JSON.stringify(Object.fromEntries(state.paymentSessions))); }
+function clearOrderSessions() { state.paymentSessions.clear(); sessionStorage.removeItem(ORDER_SESSION_STORAGE_KEY); sessionStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY); }
 function savePendingPayment(payment) { if (payment?.orderNo) sessionStorage.setItem(PENDING_PAYMENT_STORAGE_KEY, JSON.stringify({ ...payment, account: state.account, savedAt: Date.now() })); }
 function pendingPayment() { try { const payment = JSON.parse(sessionStorage.getItem(PENDING_PAYMENT_STORAGE_KEY) || 'null'); return payment && payment.account === state.account && Date.now() - Number(payment.savedAt || 0) < 86400000 ? payment : null; } catch { return null; } }
 function accountHistory() { try { return JSON.parse(localStorage.getItem(ACCOUNT_HISTORY_KEY) || '[]').filter((phone) => /^1[3-9]\d{9}$/.test(phone)); } catch { return []; } }
@@ -74,7 +72,7 @@ function renderAccountHistory() { const accounts = accountHistory(); $('#account
 function showAccountModal() { $('#accountPhone').value = ''; $('#accountMessage').textContent = ''; renderAccountHistory(); $('#accountModal').classList.remove('hidden'); }
 function applyAccount(phone) { state.account = phone; state.orderAuthorization = null; $('#contact').value = phone; $('#accountWelcome').textContent = `欢迎你：${phone}`; $('#accountModal').classList.add('hidden'); }
 function initializeAccount() { const phone = localStorage.getItem(ACCOUNT_STORAGE_KEY) || ''; if (/^1[3-9]\d{9}$/.test(phone) && !/^(\d)\1{10}$/.test(phone)) applyAccount(phone); else showAccountModal(); }
-async function createAccount() { const phone = $('#accountPhone').value.trim(); const button = $('#accountSubmit'); $('#accountMessage').textContent = ''; button.disabled = true; button.textContent = '正在验证…'; try { const result = await api('contact-check', { contact: phone }); saveAccount(result.contact); applyAccount(result.contact); } catch (error) { $('#accountMessage').textContent = error.message; } finally { button.disabled = false; button.textContent = '创建账号'; } }
+async function createAccount() { const phone = $('#accountPhone').value.trim(); const button = $('#accountSubmit'); $('#accountMessage').textContent = ''; button.disabled = true; button.textContent = '正在验证…'; try { await api('contact-check', { contact: phone }); saveAccount(phone); applyAccount(phone); } catch (error) { $('#accountMessage').textContent = error.message; } finally { button.disabled = false; button.textContent = '创建账号'; } }
 function logoutAccount() { localStorage.removeItem(ACCOUNT_STORAGE_KEY); clearOrderSessions(); state.account = ''; state.orderAuthorization = null; state.orders = []; $('#contact').value = ''; showAccountModal(); }
 function orderData(entry) { const result = entry?.result || {}; return result.data ?? result; }
 function orderNo(data, fallback = '') { return data?.trade_no || data?.order_no || data?.order_id || fallback; }
@@ -95,7 +93,7 @@ function orderTime(value) {
   }
   return text;
 }
-function cardValues(data) { const source = data?.response?.cards ?? data?.cards ?? data?.card_list ?? data?.card_info ?? data?.card ?? data?.kami ?? data?.credentials ?? []; const values = Array.isArray(source) ? source : source ? [source] : []; return values.map((item) => typeof item === 'object' ? (item.card || item.card_no || item.code || item.content || item.password || JSON.stringify(item)) : item).filter(Boolean); }
+function cardValues(data) { const source = data?.cards ?? []; return Array.isArray(source) ? source.map(String).filter(Boolean) : []; }
 async function copyText(text) {
   const value = String(text ?? '');
   if (!value) throw new Error('没有可复制的内容');
@@ -155,21 +153,17 @@ async function selectGoods(card) {
 }
 async function updatePrice() { if (!state.selected || !state.channelId) return; const requestId = ++state.priceRequest; const goodsKey = state.selected.goods_key; const channelId = state.channelId; const quantity = Number($('#quantity').value) || 1; try { const data = await api('price', { goods_key: goodsKey, channel_id: channelId, quantity }); if (requestId !== state.priceRequest) return; $('#total').textContent = `￥${Number(data.total_amount ?? data.amount ?? state.selected.price).toFixed(2)}`; } catch (error) { if (requestId === state.priceRequest) $('#message').textContent = error.message; } }
 function paymentFields(source = {}) {
-  return { orderNo: source.trade_no || source.order_no || source.order_id || source.id || '', entryUrl: source.payurl || source.pay_url || source.url || '', paymentPageUrl: source.payment_page_url || '', sessionToken: source.session_token || '', warning: source.payment_resolver_warning || '' };
+  return { orderNo: source.order_no || '', paymentId: source.payment_id || '' };
 }
-function showPaymentPage(payment) {
-  const url = payment.paymentPageUrl;
-  if (!/^https?:\/\//i.test(url)) throw new Error(payment.warning || '未能获取最终支付页面');
+function showPaymentPage(url) {
+  if (!/^https?:\/\//i.test(url)) throw new Error('未能获取最终支付页面');
   const frame = $('#paymentFrame');
-  const openLink = $('#openPaymentPage');
   frame.src = url;
   frame.classList.remove('hidden');
   $('#paymentBrowserUrl').classList.add('hidden');
-  openLink.href = url;
-  openLink.classList.remove('hidden');
-  $('#payStatus').textContent = '请在上方支付页面完成付款；若页面无法显示，请点击“新窗口打开”';
+  $('#payStatus').textContent = '请在上方支付页面完成付款';
 }
-function openPayment(data) { const payment = paymentFields(data); if (!payment.entryUrl) throw new Error('上游未返回支付页面地址'); state.payment = payment; $('#orderText').textContent = payment.orderNo ? `订单号：${payment.orderNo}` : ''; state.currentOrder = payment.orderNo; saveOrderSession(payment.orderNo, payment.sessionToken); savePendingPayment(payment); saveOrder(payment.orderNo); $('#paymentModal').classList.remove('hidden'); if (payment.orderNo) pollOrder(payment.orderNo); showPaymentPage({ ...payment, paymentPageUrl: payment.entryUrl }); }
+async function openPayment(data) { const payment = paymentFields(data); if (!payment.orderNo || !payment.paymentId) throw new Error('支付会话创建失败'); state.payment = payment; $('#orderText').textContent = `订单号：${payment.orderNo}`; state.currentOrder = payment.orderNo; saveOrderSession(payment.orderNo, payment.paymentId); savePendingPayment(payment); saveOrder(payment.orderNo); $('#paymentModal').classList.remove('hidden'); $('#paymentFrame').classList.add('hidden'); $('#paymentBrowserUrl').classList.remove('hidden'); $('#paymentBrowserUrl').textContent = '服务器正在打开最终支付页面…'; pollOrder(payment.orderNo); const result = await api('payment-page', { payment_id: payment.paymentId }); showPaymentPage(result.url); }
 async function createOrder() {
   $('#message').textContent = '';
   if (!state.selected || !state.channelId || !state.account) {
@@ -201,7 +195,7 @@ async function createOrder() {
     button.textContent = '去支付';
   }
 }
-function pollOrder(orderNo) { clearInterval(state.timer); state.timer = setInterval(async () => { try { const data = await api('query', { trade_no: orderNo, session_token: state.orderSessions.get(String(orderNo)) || '' }); if (isPaid(data)) { clearInterval(state.timer); sessionStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY); $('#payStatus').textContent = '支付成功，正在打开订单详情'; setTimeout(() => showOrderDetail(orderNo), 600); } } catch { if (!$('#paymentModal').classList.contains('hidden')) $('#paymentBrowserUrl').textContent = '支付状态查询暂时失败，正在自动重试…'; } }, 3000); }
+function pollOrder(orderNo) { clearInterval(state.timer); state.timer = setInterval(async () => { try { const data = await api('query', { trade_no: orderNo, payment_id: state.paymentSessions.get(String(orderNo)) || '' }); if (isPaid(data)) { clearInterval(state.timer); sessionStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY); $('#payStatus').textContent = '支付成功，正在打开订单详情'; setTimeout(() => showOrderDetail(orderNo), 600); } } catch { if (!$('#paymentModal').classList.contains('hidden')) $('#paymentBrowserUrl').textContent = '支付状态查询暂时失败，正在自动重试…'; } }, 3000); }
 function showView(orders, shouldLoad = true) { $('#shopView').classList.toggle('hidden', orders); $('#ordersView').classList.toggle('hidden', !orders); $('#showShop').classList.toggle('active', !orders); $('#showOrders').classList.toggle('active', orders); if (orders && shouldLoad) loadOrders(); }
 function renderOrder(entry) { if (entry.error) return `<article class="order-card"><div><small>${escapeHtml(entry.trade_no)}</small><h3>查询失败</h3><p class="message">${escapeHtml(entry.error)}</p></div></article>`; const data = orderData(entry); const no = orderNo(data, entry.trade_no); const amount = data.total_amount ?? data.amount ?? data.price; const cards = cardValues(data); return `<article class="order-card"><div><small>订单号：${escapeHtml(no)}</small><h3>${escapeHtml(data.goods_name || data.name || data.title || '自助商城订单')}</h3><p>${escapeHtml(orderTime(data.create_time || data.created_at || data.add_time || ''))}</p></div><div class="order-side"><span class="status-badge ${isPaid(data) ? 'paid' : ''}">${escapeHtml(orderStatus(data))}</span>${amount !== undefined ? `<strong>￥${Number(amount).toFixed(2)}</strong>` : ''}<button class="detail-button" data-order="${escapeHtml(no)}" type="button">${cards.length ? '查看卡密' : '查看详情'}</button></div></article>`; }
 async function refreshCaptcha() {
@@ -210,7 +204,7 @@ async function refreshCaptcha() {
   image.classList.add('hidden');
   $('#captchaMessage').textContent = '正在加载验证码…';
   const data = await api('captcha-start', {});
-  const src = `${API_ENTRY}?action=captcha-image&url=${encodeURIComponent(data.img_url)}&session_token=${encodeURIComponent(data.session_token)}&t=${Date.now()}`;
+  const src = `${API_ENTRY}?action=captcha-image&captcha_id=${encodeURIComponent(data.captcha_id)}&t=${Date.now()}`;
   await new Promise((resolve, reject) => {
     image.onload = resolve;
     image.onerror = () => reject(new Error('验证码图片加载失败，请点击重试'));
@@ -221,10 +215,10 @@ async function refreshCaptcha() {
   $('#captchaMessage').textContent = '';
 }
 function requestCaptcha() { $('#captchaMessage').textContent = ''; $('#captchaCode').value = ''; $('#captchaImage').classList.add('hidden'); $('#captchaModal').classList.remove('hidden'); refreshCaptcha().catch((error) => { state.captcha = null; $('#captchaMessage').textContent = error.message; }); return new Promise((resolve) => { state.captchaResolve = resolve; }); }
-async function submitCaptcha() { const code = $('#captchaCode').value.trim(); if (!code || !state.captcha) { $('#captchaMessage').textContent = '请输入验证码'; return; } const button = $('#captchaSubmit'); button.disabled = true; try { const data = await api('captcha-check', { code, ip: state.captcha.ip, check_url: state.captcha.check_url, session_token: state.captcha.session_token }); $('#captchaModal').classList.add('hidden'); state.captchaResolve?.({ ticket: data.ticket, session_token: state.captcha.session_token }); state.captchaResolve = null; } catch (error) { $('#captchaMessage').textContent = error.message; $('#captchaCode').value = ''; await refreshCaptcha(); } finally { button.disabled = false; } }
-async function loadOrders() { if (state.ordersLoading) return state.ordersLoading; state.ordersLoading = (async () => { $('#ordersMessage').textContent = ''; $('#ordersList').innerHTML = '<div class="skeleton"></div>'; try { if (!state.orderAuthorization) { const captcha = await requestCaptcha(); if (!captcha) { $('#ordersList').innerHTML = ''; return; } state.orderAuthorization = { keywords: state.account, ticket: captcha.ticket, session_token: captcha.session_token }; } state.orders = unwrapList(await api('orders', state.orderAuthorization)); $('#ordersList').innerHTML = state.orders.length ? state.orders.map((item) => renderOrder({ trade_no: orderNo(item), result: { data: item } })).join('') : '<div class="empty-orders"><h2>暂无订单</h2><p>当前账号还没有历史订单。</p></div>'; } catch (error) { $('#ordersList').innerHTML = ''; $('#ordersMessage').textContent = error.message; } finally { state.ordersLoading = null; } })(); return state.ordersLoading; }
+async function submitCaptcha() { const code = $('#captchaCode').value.trim(); if (!code || !state.captcha) { $('#captchaMessage').textContent = '请输入验证码'; return; } const button = $('#captchaSubmit'); button.disabled = true; try { const data = await api('captcha-check', { code, captcha_id: state.captcha.captcha_id }); $('#captchaModal').classList.add('hidden'); state.captchaResolve?.({ authorization_id: data.authorization_id }); state.captchaResolve = null; } catch (error) { $('#captchaMessage').textContent = error.message; $('#captchaCode').value = ''; await refreshCaptcha(); } finally { button.disabled = false; } }
+async function loadOrders() { if (state.ordersLoading) return state.ordersLoading; state.ordersLoading = (async () => { $('#ordersMessage').textContent = ''; $('#ordersList').innerHTML = '<div class="skeleton"></div>'; try { if (!state.orderAuthorization) { const captcha = await requestCaptcha(); if (!captcha) { $('#ordersList').innerHTML = ''; return; } state.orderAuthorization = { keywords: state.account, authorization_id: captcha.authorization_id }; } state.orders = unwrapList(await api('orders', state.orderAuthorization)); $('#ordersList').innerHTML = state.orders.length ? state.orders.map((item) => renderOrder({ trade_no: orderNo(item), result: { data: item } })).join('') : '<div class="empty-orders"><h2>暂无订单</h2><p>当前账号还没有历史订单。</p></div>'; } catch (error) { $('#ordersList').innerHTML = ''; $('#ordersMessage').textContent = error.message; } finally { state.ordersLoading = null; } })(); return state.ordersLoading; }
 function authorizeOrder(tradeNo) { if (!state.orderAuthorization || !state.orders.some((item) => String(orderNo(item)) === String(tradeNo))) throw new Error('当前账号未授权该订单'); return state.orderAuthorization; }
-async function showOrderDetail(tradeNo, queryPassword = '') { $('#paymentModal').classList.add('hidden'); showView(true, false); $('#orderDetail').innerHTML = '<p class="muted">正在查询订单…</p>'; $('#orderModal').classList.remove('hidden'); try { const sessionToken = state.orderSessions.get(String(tradeNo)); const authorization = sessionToken ? null : authorizeOrder(tradeNo); const data = await api('order-info', { trade_no: tradeNo, query_password: queryPassword, session_token: sessionToken || authorization.session_token }); const cards = cardValues(data); const amount = data.total_amount ?? data.amount ?? data.price; $('#orderDetail').innerHTML = `<dl class="order-fields"><div><dt>订单号</dt><dd>${escapeHtml(orderNo(data, tradeNo))}</dd></div><div><dt>商品</dt><dd>${escapeHtml(data.goods_name || data.name || data.title || '—')}</dd></div><div><dt>状态</dt><dd>${escapeHtml(orderStatus(data))}</dd></div>${amount !== undefined ? `<div><dt>金额</dt><dd>￥${Number(amount).toFixed(2)}</dd></div>` : ''}</dl><section class="cards-detail"><div class="cards-heading"><h3>卡密详情</h3>${cards.length > 1 ? `<button class="copy-card copy-all" type="button">复制全部</button>` : ''}</div>${cards.length ? cards.map((card, index) => `<article class="card-code"><div class="card-code-head"><span class="card-index">卡密 ${String(index + 1).padStart(2, '0')}</span><button class="copy-card" data-card="${escapeHtml(card)}" type="button">复制此卡密</button></div><code title="点击或长按可选择卡密">${escapeHtml(card)}</code></article>`).join('') : '<p class="muted">卡密尚未发放，请稍后刷新订单。</p>'}</section>`; } catch (error) { $('#orderDetail').innerHTML = `<p class="message">${escapeHtml(error.message)}</p>`; } }
+async function showOrderDetail(tradeNo, queryPassword = '') { $('#paymentModal').classList.add('hidden'); showView(true, false); $('#orderDetail').innerHTML = '<p class="muted">正在查询订单…</p>'; $('#orderModal').classList.remove('hidden'); try { const paymentId = state.paymentSessions.get(String(tradeNo)); const authorization = paymentId ? null : authorizeOrder(tradeNo); const data = await api('order-info', { trade_no: tradeNo, query_password: queryPassword, payment_id: paymentId || '', authorization_id: authorization?.authorization_id || '' }); const cards = cardValues(data); const amount = data.total_amount ?? data.amount ?? data.price; $('#orderDetail').innerHTML = `<dl class="order-fields"><div><dt>订单号</dt><dd>${escapeHtml(orderNo(data, tradeNo))}</dd></div><div><dt>商品</dt><dd>${escapeHtml(data.goods_name || data.name || data.title || '—')}</dd></div><div><dt>状态</dt><dd>${escapeHtml(orderStatus(data))}</dd></div>${amount !== undefined ? `<div><dt>金额</dt><dd>￥${Number(amount).toFixed(2)}</dd></div>` : ''}</dl><section class="cards-detail"><div class="cards-heading"><h3>卡密详情</h3>${cards.length > 1 ? `<button class="copy-card copy-all" type="button">复制全部</button>` : ''}</div>${cards.length ? cards.map((card, index) => `<article class="card-code"><div class="card-code-head"><span class="card-index">卡密 ${String(index + 1).padStart(2, '0')}</span><button class="copy-card" data-card="${escapeHtml(card)}" type="button">复制此卡密</button></div><code title="点击或长按可选择卡密">${escapeHtml(card)}</code></article>`).join('') : '<p class="muted">卡密尚未发放，请稍后刷新订单。</p>'}</section>`; } catch (error) { $('#orderDetail').innerHTML = `<p class="message">${escapeHtml(error.message)}</p>`; } }
 
 $('#goods').addEventListener('click', (event) => { const retry = event.target.closest('[data-retry="goods"]'); if (retry) { loadGoods(Number($('.category.active')?.dataset.id ?? -1), $('#search').value.trim()); return; } const card = event.target.closest('.goods-card'); if (card) selectGoods(card); });
 $('#goods').addEventListener('keydown', (event) => { if (event.key === 'Enter') { const card = event.target.closest('.goods-card'); if (card) selectGoods(card); } });
