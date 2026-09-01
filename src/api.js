@@ -33,7 +33,8 @@ const cardStrings = data => {
     return account || password ? [`${account}${account && password ? ' ' : ''}${password}`] : [];
   });
 };
-const publicOrderDetail = result => { const data = dataOf(result); return ok({ ...publicOrderSummary(data), cards: cardStrings(data) }); };
+const orderInstructions = data => String(data.instructions ?? data.instruction ?? data.use_instructions ?? data.usage_instructions ?? data.goods_instructions ?? data.goods_instruction ?? data.goods?.instructions ?? data.goods?.instruction ?? data.goods?.description ?? '').trim();
+const publicOrderDetail = result => { const data = dataOf(result); return ok({ ...publicOrderSummary(data), cards: cardStrings(data), instructions: orderInstructions(data) }); };
 const paymentSessions = new Map();
 const captchaSessions = new Map();
 const orderAuthorizations = new Map();
