@@ -157,30 +157,32 @@ async function updatePrice() { if (!state.selected || !state.channelId) return; 
 function paymentFields(source = {}) {
   return { orderNo: source.trade_no || source.order_no || source.order_id || source.id || '', entryUrl: source.payurl || source.pay_url || '', qr: source.actual_pay_content || source.qrcode || source.qr_code || source.qr || source.code_url || '', image: source.actual_qr_image || source.qrcode_url || source.qr_image || source.image || '', paymentPageUrl: source.payment_page_url || '', sessionToken: source.session_token || '', warning: source.payment_resolver_warning || '', contentType: source.payment_content_type || '' };
 }
-function renderPaymentCode(payment) {
-  const qrBox = $('#qrImage');
-  const content = payment.contentType === 'payment_page' ? payment.paymentPageUrl : (payment.qr || payment.image || payment.paymentPageUrl);
-  if (!content) throw new Error(payment.warning || '未能获取最终支付二维码或支付页面');
-  qrBox.innerHTML = '';
-  if (payment.image && /^(?:https?:\/\/|data:image\/)/i.test(payment.image)) { const image = document.createElement('img'); image.src = payment.image; image.alt = '最终支付二维码'; qrBox.appendChild(image); }
-  else { if (typeof QRCode === 'undefined') throw new Error('本地二维码组件加载失败，请刷新页面重试'); new QRCode(qrBox, { text: content, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M }); }
-  $('#paymentBrowser').classList.add('hidden'); qrBox.classList.remove('hidden');
-  $('#payStatus').innerHTML = escapeHtml(payment.contentType === 'payment_page' ? '请扫码打开最终支付界面完成付款' : '已获取最终收款码，等待支付中');
+function showPaymentPage(payment) {
+  const url = payment.paymentPageUrl;
+  if (!/^https?:\/\//i.test(url)) throw new Error(payment.warning || '未能获取最终支付页面');
+  const frame = $('#paymentFrame');
+  const openLink = $('#openPaymentPage');
+  frame.src = url;
+  frame.classList.remove('hidden');
+  $('#paymentBrowserUrl').classList.add('hidden');
+  openLink.href = url;
+  openLink.classList.remove('hidden');
+  $('#payStatus').textContent = '请在上方支付页面完成付款；若页面无法显示，请点击“新窗口打开”';
 }
 async function resolvePayment() {
   const payment = state.payment;
   if (!payment) return;
   const requestId = ++state.paymentRequest;
-  $('#qrImage').classList.add('hidden'); $('#paymentBrowser').classList.remove('hidden'); $('#paymentBrowserUrl').textContent = 'Node.js 后端正在获取最终收款码…'; $('#payStatus').textContent = '正在获取最终支付二维码…';
+  $('#paymentFrame').classList.add('hidden'); $('#paymentFrame').removeAttribute('src'); $('#openPaymentPage').classList.add('hidden'); $('#paymentBrowserUrl').classList.remove('hidden'); $('#paymentBrowserUrl').textContent = 'Node.js 后端正在打开最终支付页面…'; $('#payStatus').textContent = '正在获取最终支付页面…';
   try {
     let resolved = payment;
     if (resolved.entryUrl) resolved = paymentFields({ ...resolved, ...await api('payment-resolve', { payurl: resolved.entryUrl, session_token: resolved.sessionToken }) });
     if (requestId !== state.paymentRequest) return;
     state.payment = resolved;
-    renderPaymentCode(resolved);
+    showPaymentPage(resolved);
   } catch (error) {
     if (requestId !== state.paymentRequest) return;
-    $('#paymentBrowserUrl').textContent = '支付二维码解析失败';
+    $('#paymentBrowserUrl').textContent = '支付页面加载失败';
     $('#payStatus').innerHTML = `<span class="payment-error">${escapeHtml(error.message)}</span><button class="retry-button payment-retry" type="button" data-retry="payment">重新解析</button>`;
   }
 }
@@ -246,7 +248,7 @@ $('#goods').addEventListener('keydown', (event) => { if (event.key === 'Enter') 
 $('#categories').addEventListener('click', (event) => { if (event.target.closest('[data-retry="categories"]')) { initializeApp(); return; } const button = event.target.closest('.category'); if (!button) return; document.querySelectorAll('.category').forEach((item) => item.classList.toggle('active', item === button)); loadGoods(Number(button.dataset.id)); });
 $('#payStatus').addEventListener('click', (event) => { if (event.target.closest('[data-retry="payment"]')) resolvePayment(); });
 $('#channels').addEventListener('click', (event) => { if (event.target.closest('[data-retry="channels"]')) { const card = Array.from(document.querySelectorAll('.goods-card')).find((item) => item.dataset.key === String(state.selected?.goods_key)); if (card) selectGoods(card); return; } const button = event.target.closest('.channel'); if (!button) return; state.channelId = Number(button.dataset.id); document.querySelectorAll('.channel').forEach((item) => item.classList.toggle('active', item === button)); updatePrice(); });
-$('#quantity').addEventListener('change', updatePrice); $('#payButton').addEventListener('click', createOrder); $('#closeModal').addEventListener('click', () => { $('#paymentModal').classList.add('hidden'); clearInterval(state.timer); }); $('#paymentModal').addEventListener('click', (event) => { if (event.target === $('#paymentModal')) $('#closeModal').click(); });
+$('#quantity').addEventListener('change', updatePrice); $('#payButton').addEventListener('click', createOrder); $('#closeModal').addEventListener('click', () => { $('#paymentModal').classList.add('hidden'); $('#paymentFrame').removeAttribute('src'); clearInterval(state.timer); });
 $('#showShop').addEventListener('click', () => showView(false)); $('#showOrders').addEventListener('click', () => showView(true)); $('#refreshOrders').addEventListener('click', loadOrders); $('#ordersView').addEventListener('click', (event) => { const button = event.target.closest('.detail-button'); if (!button) return; const password = button.dataset.password === '1' ? prompt('请输入下单时设置的安全密码') : ''; if (password !== null) showOrderDetail(button.dataset.order, password); }); $('#closeOrderModal').addEventListener('click', () => $('#orderModal').classList.add('hidden')); $('#orderModal').addEventListener('click', (event) => { if (event.target === $('#orderModal')) $('#closeOrderModal').click(); }); $('#orderDetail').addEventListener('click', async (event) => { const button = event.target.closest('.copy-card'); if (!button) return; const text = button.classList.contains('copy-all') ? Array.from($('#orderDetail').querySelectorAll('.copy-card[data-card]')).map((item) => item.dataset.card).join('\n') : button.dataset.card; try { await copyText(text); copyFeedback(button, true); } catch (error) { copyFeedback(button, false); } });
 $('#captchaImage').addEventListener('click', () => refreshCaptcha().catch((error) => { $('#captchaMessage').textContent = error.message; })); $('#captchaSubmit').addEventListener('click', submitCaptcha); $('#captchaCode').addEventListener('keydown', (event) => { if (event.key === 'Enter') submitCaptcha(); }); $('#closeCaptchaModal').addEventListener('click', () => { $('#captchaModal').classList.add('hidden'); state.captchaResolve?.(''); state.captchaResolve = null; });
 $('#accountSubmit').addEventListener('click', createAccount); $('#accountPhone').addEventListener('keydown', (event) => { if (event.key === 'Enter') createAccount(); });
