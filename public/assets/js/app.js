@@ -64,7 +64,7 @@ function applyShopInfo(data = {}) {
     name = candidates[0] || '';
   }
   const notice = String(data.description || data.notice || data.announcement || '').trim();
-  if (name) { document.title = name; const meta = document.querySelector('meta[name="application-name"]'); if (meta) meta.setAttribute('content', name); }
+  if (name) { document.title = name; $('#headerShopName').textContent = name; const meta = document.querySelector('meta[name="application-name"]'); if (meta) meta.setAttribute('content', name); }
   renderShopContacts(data);
   if (notice) { $('#announcementText').textContent = notice; $('#announcementModal').classList.remove('hidden'); }
 }
