@@ -255,7 +255,8 @@ install_or_upgrade() {
     printf '管理菜单已同步更新。\n'
   fi
   rm -rf "$archive" "$extract_root" "$saved_env"
-  printf '安装/升级完成。重新执行 shop-pro 即可使用新版菜单。\n'
+  printf '安装/升级完成，正在切换到新版菜单...\n'
+  exec "$COMMAND_PATH"
 }
 uninstall_program() {
   if [[ -f "$DOMAINS_FILE" ]] && [[ -s "$DOMAINS_FILE" ]]; then

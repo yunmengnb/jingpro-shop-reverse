@@ -155,12 +155,12 @@ async function selectGoods(card) {
 }
 async function updatePrice() { if (!state.selected || !state.channelId) return; const requestId = ++state.priceRequest; const goodsKey = state.selected.goods_key; const channelId = state.channelId; const quantity = Number($('#quantity').value) || 1; try { const data = await api('price', { goods_key: goodsKey, channel_id: channelId, quantity }); if (requestId !== state.priceRequest) return; $('#total').textContent = `￥${Number(data.total_amount ?? data.amount ?? state.selected.price).toFixed(2)}`; } catch (error) { if (requestId === state.priceRequest) $('#message').textContent = error.message; } }
 function paymentFields(source = {}) {
-  return { orderNo: source.trade_no || source.order_no || source.order_id || source.id || '', entryUrl: source.payurl || source.pay_url || source.url || '', qr: source.actual_pay_content || source.qrcode || source.qr_code || source.qr || source.code_url || '', image: source.actual_qr_image || source.qrcode_url || source.qr_image || source.image || '', sessionToken: source.session_token || '', warning: source.payment_resolver_warning || '', contentType: source.payment_content_type || '' };
+  return { orderNo: source.trade_no || source.order_no || source.order_id || source.id || '', entryUrl: source.payurl || source.pay_url || '', qr: source.actual_pay_content || source.qrcode || source.qr_code || source.qr || source.code_url || '', image: source.actual_qr_image || source.qrcode_url || source.qr_image || source.image || '', paymentPageUrl: source.payment_page_url || '', sessionToken: source.session_token || '', warning: source.payment_resolver_warning || '', contentType: source.payment_content_type || '' };
 }
 function renderPaymentCode(payment) {
   const qrBox = $('#qrImage');
-  const content = payment.qr || payment.image;
-  if (!content) throw new Error(payment.warning || '未能获取最终支付二维码');
+  const content = payment.qr || payment.image || payment.paymentPageUrl;
+  if (!content) throw new Error(payment.warning || '未能获取最终支付二维码或支付页面');
   qrBox.innerHTML = '';
   if (payment.image && /^(?:https?:\/\/|data:image\/)/i.test(payment.image)) { const image = document.createElement('img'); image.src = payment.image; image.alt = '最终支付二维码'; qrBox.appendChild(image); }
   else { if (typeof QRCode === 'undefined') throw new Error('本地二维码组件加载失败，请刷新页面重试'); new QRCode(qrBox, { text: content, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M }); }
