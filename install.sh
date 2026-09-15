@@ -27,6 +27,97 @@ port_in_use() {
   if command -v lsof >/dev/null 2>&1; then lsof -i ":${port}" -sTCP:LISTEN >/dev/null 2>&1; return $?; fi
   return 1
 }
+PKG_MANAGER=''
+detect_pkg_manager() {
+  if command -v apt-get >/dev/null 2>&1; then PKG_MANAGER=apt-get
+  elif command -v dnf >/dev/null 2>&1; then PKG_MANAGER=dnf
+  elif command -v yum >/dev/null 2>&1; then PKG_MANAGER=yum
+  elif command -v apk >/dev/null 2>&1; then PKG_MANAGER=apk
+  elif command -v zypper >/dev/null 2>&1; then PKG_MANAGER=zypper
+  fi
+}
+pkg_install() {
+  case "$PKG_MANAGER" in
+    apt-get) DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1 || true; DEBIAN_FRONTEND=noninteractive apt-get install -y "$@" || return 1 ;;
+    dnf) dnf install -y "$@" || return 1 ;;
+    yum) yum install -y "$@" || return 1 ;;
+    apk) apk add --no-cache "$@" || return 1 ;;
+    zypper) zypper --non-interactive install "$@" || return 1 ;;
+    *) return 1 ;;
+  esac
+}
+ensure_command() {
+  local cmd=$1 pkg=$2
+  if command -v "$cmd" >/dev/null 2>&1; then
+    printf '已检测到 %s，跳过安装。\n' "$cmd"
+    return 0
+  fi
+  [[ -n "$PKG_MANAGER" ]] || fail "未检测到 $cmd，且无法识别系统包管理器，请手动安装后重试。"
+  printf '未检测到 %s，正在自动安装...\n' "$cmd"
+  pkg_install "$pkg" || fail "$pkg 自动安装失败，请手动安装后重试。"
+  command -v "$cmd" >/dev/null 2>&1 || fail "$pkg 已安装但未找到 $cmd 命令，请检查 PATH。"
+  printf '%s 安装完成。\n' "$cmd"
+}
+ensure_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    printf '已检测到 Docker，跳过安装。\n'
+  else
+    printf '未检测到 Docker，正在自动安装 Docker Engine...\n'
+    if curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh; then
+      rm -f /tmp/get-docker.sh
+    else
+      rm -f /tmp/get-docker.sh
+      [[ -n "$PKG_MANAGER" ]] || fail "Docker 自动安装失败，请手动安装 Docker Engine。"
+      case "$PKG_MANAGER" in
+        apt-get) pkg_install docker.io docker-compose-v2 || pkg_install docker.io || fail "Docker 自动安装失败，请手动安装 Docker Engine。" ;;
+        dnf|yum) pkg_install docker-ce docker-ce-cli containerd.io || fail "Docker 自动安装失败，请手动安装 Docker Engine。" ;;
+        apk|zypper) pkg_install docker || fail "Docker 自动安装失败，请手动安装 Docker Engine。" ;;
+      esac
+    fi
+    command -v docker >/dev/null 2>&1 || fail "Docker 已安装但未找到 docker 命令，请检查 PATH。"
+    printf 'Docker 安装完成。\n'
+  fi
+  if docker info >/dev/null 2>&1; then
+    printf 'Docker 服务运行正常。\n'
+  else
+    printf 'Docker 服务未运行，正在启动...\n'
+    if command -v systemctl >/dev/null 2>&1; then systemctl enable --now docker >/dev/null 2>&1 || true
+    elif command -v service >/dev/null 2>&1; then service docker start >/dev/null 2>&1 || true
+    fi
+    local i
+    for i in $(seq 1 30); do
+      docker info >/dev/null 2>&1 && break
+      sleep 1
+    done
+    docker info >/dev/null 2>&1 || fail "Docker 服务启动失败，请手动启动 Docker 后重试。"
+    printf 'Docker 服务已启动。\n'
+  fi
+}
+ensure_compose() {
+  if docker compose version >/dev/null 2>&1; then
+    printf '已检测到 Docker Compose 插件，跳过安装。\n'
+    return 0
+  fi
+  printf '未检测到 Docker Compose 插件，正在自动安装...\n'
+  case "$PKG_MANAGER" in
+    apt-get) pkg_install docker-compose-plugin || pkg_install docker-compose-v2 || true ;;
+    dnf|yum) pkg_install docker-compose-plugin || true ;;
+    apk) pkg_install docker-cli-compose || true ;;
+    zypper) pkg_install docker-compose-plugin || true ;;
+  esac
+  if docker compose version >/dev/null 2>&1; then
+    printf 'Docker Compose 插件安装完成。\n'
+    return 0
+  fi
+  fail "Docker Compose 插件自动安装失败，请手动安装 docker-compose-plugin 后重试。"
+}
+ensure_dependencies() {
+  detect_pkg_manager
+  ensure_command curl curl
+  ensure_command tar tar
+  ensure_docker
+  ensure_compose
+}
 show_agreement() {
   cat <<'AGREEMENT'
 
@@ -367,10 +458,6 @@ MENU
 main() {
   local shop_url port server_ip domain _d
   require_root
-  command -v curl >/dev/null 2>&1 || fail "未安装 curl。"
-  command -v tar >/dev/null 2>&1 || fail "未安装 tar。"
-  command -v docker >/dev/null 2>&1 || fail "未安装 Docker。请先安装 Docker Engine 与 Compose 插件。"
-  docker compose version >/dev/null 2>&1 || fail "缺少 docker compose 插件。"
   show_agreement
   printf '请输入完整店铺链接（支持 http:// 或 https://）：'; IFS= read -r shop_url < /dev/tty
   validate_shop_url "$shop_url" || fail "店铺链接格式无效。"
@@ -382,6 +469,8 @@ main() {
     validate_port "$port" || fail "端口必须是 1-65535 的数字。"
   fi
   printf '请输入要绑定的域名（多个用空格分隔，留回车跳过）：'; IFS= read -r domain < /dev/tty
+  printf '\n配置完成，开始检测 Docker 及必要依赖...\n'
+  ensure_dependencies
   install_source
   write_env "$shop_url" "$port"
   install_command

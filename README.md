@@ -1,6 +1,6 @@
 # 鲸pro店铺反代程序（Node.js Docker 版）
 
-当前版本：`1.2.0`
+当前版本：`1.2.1`
 
 本项目是 Node.js Docker 部署版本，用于代理已授权店铺接口，并提供商品浏览、创建订单、支付、订单查询、店铺公告和客服联系方式展示。
 
@@ -21,10 +21,9 @@
 
 - 64 位 Linux 服务器
 - root 权限
-- Docker Engine
-- Docker Compose 插件（`docker compose`）
-- `curl`、`tar`
 - 服务器能够访问店铺上游接口及支付渠道
+
+Docker Engine、Docker Compose 插件及 `curl`、`tar` 由一键安装脚本自动检测：缺失时自动安装，已安装则跳过。
 
 ## 一键安装
 

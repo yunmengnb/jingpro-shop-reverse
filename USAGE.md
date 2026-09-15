@@ -1,14 +1,14 @@
 # Node.js Docker 版使用说明
 
-当前版本：`1.2.0`
+当前版本：`1.2.1`
 
 ## 1. 环境要求
 
 - 64 位 Linux 服务器
 - root 权限
-- Docker Engine 和 Docker Compose 插件
-- `curl`、`tar`
 - 服务器能够访问店铺上游和支付渠道
+
+Docker Engine、Docker Compose 插件及 `curl`、`tar` 由安装脚本自动检测：缺失时自动安装，已安装则跳过。
 
 ## 2. 一键安装
 
@@ -29,6 +29,8 @@ https://店铺域名/shop/店铺标识
 
 2. 对外运行端口，范围 `1-65535`。
 3. 绑定域名；暂时不绑定可按提示跳过。
+
+配置完成后，安装程序会自动检测 Docker Engine、Docker Compose 插件及 `curl`、`tar`：缺失时自动安装，已安装则跳过。
 
 程序默认安装到 `/opt/shop-pro`，管理命令安装到 `/usr/local/bin/shop-pro`。安装程序会尝试通过 firewalld、UFW 或 iptables 开放运行端口。
 

@@ -15,7 +15,7 @@ export function loadConfig(env = process.env) {
   if (!env.SHOP_URL) throw new Error('缺少 SHOP_URL 配置，请先运行安装程序配置店铺链接');
   const parsed = parseShopUrl(env.SHOP_URL);
   return {
-    programName: '鲸pro店铺反代程序', version: '1.2.0',
+    programName: '鲸pro店铺反代程序', version: '1.2.1',
     ...parsed,
     port: number(env.PORT, 3000), connectTimeout: number(env.CONNECT_TIMEOUT, 10000), timeout: number(env.REQUEST_TIMEOUT, 25000),
     verifySsl: bool(env.VERIFY_SSL, true),
